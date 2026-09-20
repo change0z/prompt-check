@@ -1,0 +1,22 @@
+name = "prompt-check"
+version = "0.1.0"
+description = "POC: categorise malicous prompts for security trend analysis"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "datasets>=3.0",
+    "pandas>=2.2",
+    "scikit-learn>=1.5",
+    "torch>=2.4",
+    "transformers>=4.45",
+    "sentencepiece>=0.2",
+    "protobuf>=5.0",
+]
+
+[[tool.uv.sources]]
+torch = [{ index = "pytorch-cpu"}]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+

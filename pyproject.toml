@@ -12,7 +12,7 @@ dependencies = [
     "protobuf>=5.0",
 ]
 
-[[tool.uv.sources]]
+[tool.uv.sources]
 torch = [{ index = "pytorch-cpu"}]
 
 [[tool.uv.index]]

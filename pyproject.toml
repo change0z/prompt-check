@@ -1,3 +1,4 @@
+[project]
 name = "prompt-check"
 version = "0.1.0"
 description = "POC: categorise malicous prompts for security trend analysis"
@@ -10,6 +11,8 @@ dependencies = [
     "transformers>=4.45",
     "sentencepiece>=0.2",
     "protobuf>=5.0",
+    "anthropic>=1.0",
+    "graphql-core>=3.2",
 ]
 
 [tool.uv.sources]

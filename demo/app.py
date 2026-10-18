@@ -35,6 +35,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -100,6 +101,9 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="Break the ERP assistant", lifespan=lifespan)
+STATIC = Path(__file__).parent / "static"
+# Fonts are self-hosted so visitors' browsers make no third-party requests.
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 class Battle(BaseModel):
@@ -142,7 +146,7 @@ def check_rate(request: Request) -> None:
 
 @app.get("/")
 def index():
-    return FileResponse(Path(__file__).parent / "static" / "index.html")
+    return FileResponse(STATIC / "index.html")
 
 
 @app.get("/health")

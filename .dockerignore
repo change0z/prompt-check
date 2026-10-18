@@ -1,0 +1,11 @@
+.git
+.venv
+**/__pycache__
+data
+results
+eval
+demo_data
+models/*
+!models/gliner-erp
+models/gliner-erp/*
+!models/gliner-erp/best

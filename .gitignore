@@ -226,3 +226,6 @@ models/*
 !models/gliner-erp/
 models/gliner-erp/*
 !models/gliner-erp/best/
+
+# Demo submissions (demo/app.py)
+demo_data/

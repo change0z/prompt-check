@@ -13,6 +13,7 @@ dependencies = [
     "protobuf>=5.0",
     "anthropic>=1.0",
     "graphql-core>=3.2",
+    "gliner2[train]>=2.1",
 ]
 
 [tool.uv.sources]
@@ -22,4 +23,10 @@ torch = [{ index = "pytorch-cpu"}]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
 explicit = true
+
+[dependency-groups]
+demo = [
+    "fastapi>=0.146.0",
+    "uvicorn>=0.54.0",
+]
 

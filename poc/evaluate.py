@@ -20,9 +20,12 @@ Classifiers:
     tfidf      TF-IDF + logistic regression trained on the train split (fast baseline)
     zeroshot   NLI zero-shot classification, no training (MIT-licensed DeBERTa)
     protectai  ProtectAI prompt-injection v2, binary INJECTION/SAFE (Apache-2.0)
+    gliner     GLiNER2.5-Decide schema classifier (Apache-2.0); also labels module and
+               intent on the ERP set. --adapter adds a LoRA from poc/train_gliner.py
 
 Writes metrics to results/<classifier>.json and prints a report.
-Usage: uv run python poc/evaluate.py [--models tfidf zeroshot protectai] [--limit N]
+Usage: uv run python poc/evaluate.py [--models tfidf zeroshot protectai gliner] [--limit N]
+       uv run python poc/evaluate.py --dataset erp --models gliner --adapter models/gliner-erp/best
 
 '''
 
@@ -102,6 +105,37 @@ def run_protectai(texts: list[str]):
     return timed(lambda t: clf(t)[0]["label"], texts)
 
 
+def run_gliner(test: pd.DataFrame, adapter: str | None):
+    """One call per prompt returning category, plus module and intent when the set has
+    them. The role is prepended when present, exactly as train_gliner.py trains it."""
+    from gliner2 import AutoExtractor
+    from train_gliner import BASE_MODEL, CATEGORY_DESCRIPTIONS, inference_schema, model_input
+
+    model = AutoExtractor.from_pretrained(BASE_MODEL)
+    if adapter:
+        model.load_adapter(adapter)
+    # Offer only the taxonomy of the set in use, in training order: the ERP categories
+    # exist only in the ERP set, "harmful" only in the public one.
+    present = set(test["category"])
+    categories = [c for c in CATEGORY_DESCRIPTIONS if c in present]
+    with_usage = {"module", "intent"} <= set(test.columns)
+    schema = inference_schema(categories, with_usage)
+    roles = test["role"] if "role" in test.columns else [None] * len(test)
+    inputs = [model_input(t, r) for t, r in zip(test["text"], roles)]
+    outputs, latencies = timed(lambda t: model.classify_text(t, schema), inputs)
+    return [o["category"] for o in outputs], latencies, outputs if with_usage else None
+
+
+def usage_accuracy(test: pd.DataFrame, outputs: list[dict]) -> dict:
+    scores = {}
+    for col in ("module", "intent"):
+        got = [o[col] for o in outputs]
+        scores[col] = round(sum(a == b for a, b in zip(test[col], got)) / len(got), 3)
+        print(f"{col} accuracy: {scores[col]:.3f}")
+    print()
+    return scores
+
+
 def latency_stats(latencies: list[float]) -> dict:
     # Skip the first call: it includes one-off warm-up cost.
     lat = sorted(latencies[1:]) or latencies
@@ -166,7 +200,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--models", nargs="+", default=["tfidf", "zeroshot", "protectai"],
-                        choices=["tfidf", "zeroshot", "protectai"])
+                        choices=["tfidf", "zeroshot", "protectai", "gliner"])
+    parser.add_argument("--adapter", default=None,
+                        help="gliner only: LoRA adapter directory from poc/train_gliner.py")
     parser.add_argument("--limit", type=int, default=None,
                         help="evaluate on a random sample of N test prompts")
     parser.add_argument("--dataset", default="public", choices=["public", "erp"],
@@ -192,6 +228,15 @@ def main() -> None:
         elif name == "zeroshot":
             preds, lat = run_zeroshot(texts)
             result = report_multiclass(name, test, preds, lat)
+        elif name == "gliner":
+            if args.adapter:
+                name = "gliner_ft"
+            preds, lat, outputs = run_gliner(test, args.adapter)
+            result = report_multiclass(name, test, preds, lat)
+            if outputs:
+                result["usage_accuracy"] = usage_accuracy(test, outputs)
+            if args.adapter:
+                result["adapter"] = args.adapter
         else:
             preds, lat = run_protectai(texts)
             result = report_binary(name, test, preds, lat)

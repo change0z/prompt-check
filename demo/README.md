@@ -1,9 +1,11 @@
 # Break the ERP Assistant demo
 
 A one-page web app where colleagues write prompts that try to get past the classifier.
-The base GLiNER2.5-Decide model and the fine-tuned adapter in `models/gliner-erp/best`
-judge each prompt side by side. Every submission is stored for later labelling and
-retraining.
+Each round assigns a random ERP role, which the models see, because data snooping
+depends on who is asking. The base GLiNER2.5-Decide model and the fine-tuned adapter in
+`models/gliner-erp/best` judge the prompt side by side. The player then votes on whether
+it should have been blocked, and the scoreboard counts how often each model agreed.
+Every submission and vote is stored for later labelling and retraining.
 
 ## Run locally
 
@@ -54,13 +56,14 @@ curl -o demo_prompts.csv "https://<your-domain>/admin/export.csv?token=<ADMIN_TO
 ```
 
 The export is disabled when `ADMIN_TOKEN` is unset. Columns: timestamp, prompt, role,
-what the player said they were attempting, and both models' category, confidence,
-module and intent.
+the player's vote (`block`, `allow`, or empty if they did not vote), and both models'
+category, confidence, module and intent. The last column, `attempt`, holds the stated
+goal from rounds played before the vote replaced it, and is empty for newer rows.
 
 ## Feed them back into training
 
-The export is not training data yet. The "attempting" column is the player's claim,
-and many attempts will turn out benign or mislabelled. For each row worth keeping:
+The export is not training data yet. The vote says whether to block, not which
+category applies, and players sometimes vote wrongly. For each row worth keeping:
 
 1. Set `category`, `module` and `intent` using the rules in
    `docs/gliner-training-data-guide.md`, and add a short `notes` reason.
@@ -69,7 +72,8 @@ and many attempts will turn out benign or mislabelled. For each row worth keepin
 3. Never add demo prompts to `eval/erp_eval.csv`, and check that none paraphrase an
    eval row.
 
-Prompts that fooled the fine-tuned model are the most valuable ones to label.
+Prompts where the fine-tuned model disagreed with the vote are the most valuable ones
+to label.
 
 ## Limits
 

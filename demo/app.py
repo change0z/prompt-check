@@ -1,7 +1,8 @@
 """
-"Break the ERP assistant" demo: colleagues submit a prompt, and the base GLiNER model and
-the fine-tuned adapter classify it side by side. Every submission is stored so it can be
-labelled and added to the training set later.
+"Break the ERP assistant" demo: colleagues get a random ERP role, submit a prompt, and the
+base GLiNER model and the fine-tuned adapter classify it side by side. The player then
+votes on whether the prompt should have been blocked. Every submission and vote is stored
+so it can be labelled and added to the training set later.
 
 Both contestants share one copy of the base weights. The adapter is wrapped with PEFT
 and switched off for the base model's turn, which reproduces a separately loaded base
@@ -48,13 +49,15 @@ ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 MAX_CHARS = 2000
 RATE_LIMIT = 10          # submissions per client per window
 RATE_WINDOW_S = 60
-# What the submitter says they were trying to do. "benign" means testing false alarms.
-ATTEMPTS = ERP_CATEGORIES + ["unsure"]
+VOTES = ("block", "allow")   # the player's answer to "should this have been blocked?"
 
 SCHEMA = inference_schema(ERP_CATEGORIES, with_usage=True)
-COLUMNS = ["created_at", "text", "role", "attempt",
+COLUMNS = ["created_at", "text", "role", "vote",
            "base_category", "base_confidence", "base_module", "base_intent",
            "ft_category", "ft_confidence", "ft_module", "ft_intent"]
+# Kept so databases from the first version still load. "attempt" was the player's stated
+# goal, chosen before seeing the verdicts; new rows leave it empty.
+LEGACY_COLUMNS = ["attempt"]
 
 state: dict = {}
 model_lock = threading.Lock()
@@ -72,6 +75,11 @@ def init_db() -> None:
         conn.execute(f"""CREATE TABLE IF NOT EXISTS submissions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             {", ".join(f"{c} {'REAL' if c.endswith('confidence') else 'TEXT'}" for c in COLUMNS)})""")
+        # Add columns introduced after the table was first created.
+        have = {r["name"] for r in conn.execute("PRAGMA table_info(submissions)")}
+        for col in COLUMNS + LEGACY_COLUMNS + ["vote_key"]:
+            if col not in have:
+                conn.execute(f"ALTER TABLE submissions ADD COLUMN {col} TEXT")
 
 
 def load_models() -> None:
@@ -97,7 +105,12 @@ app = FastAPI(title="Break the ERP assistant", lifespan=lifespan)
 class Battle(BaseModel):
     text: str = Field(min_length=1, max_length=MAX_CHARS)
     role: str
-    attempt: str = "unsure"
+
+
+class Vote(BaseModel):
+    id: int
+    key: str
+    vote: str
 
 
 def classify(text: str, role: str) -> dict:
@@ -139,15 +152,13 @@ def health():
 
 @app.get("/api/options")
 def options():
-    return {"roles": ROLES, "attempts": ATTEMPTS, "max_chars": MAX_CHARS}
+    return {"roles": ROLES, "max_chars": MAX_CHARS}
 
 
 @app.post("/api/battle")
 async def battle(body: Battle, request: Request):
     if body.role not in ROLES:
         raise HTTPException(422, f"role must be one of {ROLES}")
-    if body.attempt not in ATTEMPTS:
-        raise HTTPException(422, f"attempt must be one of {ATTEMPTS}")
     text = body.text.strip()
     if not text:
         raise HTTPException(422, "Prompt is empty.")
@@ -155,28 +166,45 @@ async def battle(body: Battle, request: Request):
 
     result = await run_in_threadpool(classify, text, body.role)
     b, f = result["base"], result["ft"]
-    row = [datetime.now(timezone.utc).isoformat(timespec="seconds"), text, body.role, body.attempt,
+    row = [datetime.now(timezone.utc).isoformat(timespec="seconds"), text, body.role, None,
            b["category"], b["confidence"], b["module"], b["intent"],
            f["category"], f["confidence"], f["module"], f["intent"]]
+    # The key lets only this player's browser vote on this submission.
+    key = secrets.token_urlsafe(16)
     with db() as conn:
-        conn.execute(f"INSERT INTO submissions ({', '.join(COLUMNS)}) "
-                     f"VALUES ({', '.join('?' * len(COLUMNS))})", row)
-    return result | {"stats": stats()}
+        cur = conn.execute(f"INSERT INTO submissions ({', '.join(COLUMNS)}, vote_key) "
+                           f"VALUES ({', '.join('?' * (len(COLUMNS) + 1))})", row + [key])
+    return result | {"id": cur.lastrowid, "key": key, "stats": stats()}
+
+
+@app.post("/api/vote")
+def vote(body: Vote):
+    """Record whether the player thinks the prompt should have been blocked. A player
+    may change their mind, so a later vote replaces an earlier one."""
+    if body.vote not in VOTES:
+        raise HTTPException(422, f"vote must be one of {list(VOTES)}")
+    with db() as conn:
+        updated = conn.execute("UPDATE submissions SET vote = ? WHERE id = ? AND vote_key = ?",
+                               (body.vote, body.id, body.key)).rowcount
+    if not updated:
+        raise HTTPException(404, "Unknown submission.")
+    return {"stats": stats()}
 
 
 @app.get("/api/stats")
 def stats():
-    """Attacks: how often each model flagged a prompt the submitter meant as an attack
-    (or was unsure about). Benign: how often each model raised a false alarm."""
+    """Scored against the players' votes, cast after seeing both verdicts. Should block:
+    how often each model flagged a prompt players said should be blocked. Fine: how often
+    each model flagged a prompt players said was fine. Unvoted prompts are not scored."""
     with db() as conn:
         r = conn.execute("""SELECT
             COUNT(*) AS total,
-            SUM(attempt != 'benign') AS attacks,
-            SUM(attempt != 'benign' AND base_category != 'benign') AS base_caught,
-            SUM(attempt != 'benign' AND ft_category != 'benign') AS ft_caught,
-            SUM(attempt = 'benign') AS benign,
-            SUM(attempt = 'benign' AND base_category != 'benign') AS base_false_alarms,
-            SUM(attempt = 'benign' AND ft_category != 'benign') AS ft_false_alarms
+            SUM(vote = 'block') AS should_block,
+            SUM(vote = 'block' AND base_category != 'benign') AS base_caught,
+            SUM(vote = 'block' AND ft_category != 'benign') AS ft_caught,
+            SUM(vote = 'allow') AS fine,
+            SUM(vote = 'allow' AND base_category != 'benign') AS base_false_alarms,
+            SUM(vote = 'allow' AND ft_category != 'benign') AS ft_false_alarms
             FROM submissions""").fetchone()
     return {k: r[k] or 0 for k in r.keys()}
 
@@ -187,8 +215,9 @@ def export(token: str = ""):
         raise HTTPException(404)
     buf = io.StringIO()
     writer = csv.writer(buf, quoting=csv.QUOTE_ALL)
-    writer.writerow(COLUMNS)
+    cols = COLUMNS + LEGACY_COLUMNS
+    writer.writerow(cols)
     with db() as conn:
-        writer.writerows(conn.execute(f"SELECT {', '.join(COLUMNS)} FROM submissions ORDER BY id"))
+        writer.writerows(conn.execute(f"SELECT {', '.join(cols)} FROM submissions ORDER BY id"))
     return Response(buf.getvalue(), media_type="text/csv",
                     headers={"Content-Disposition": "attachment; filename=demo_prompts.csv"})

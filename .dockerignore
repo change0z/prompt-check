@@ -9,3 +9,6 @@ models/*
 !models/gliner-erp
 models/gliner-erp/*
 !models/gliner-erp/best
+!models/gliner-erp-multi
+models/gliner-erp-multi/*
+!models/gliner-erp-multi/best

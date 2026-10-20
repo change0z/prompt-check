@@ -1,18 +1,20 @@
 """
-promptcheck demo: visitors get a random ERP role, submit a prompt, and the
-base GLiNER model and the fine-tuned adapter classify it side by side. The player then
+promptcheck demo: visitors get a random ERP role, submit a prompt, and four classifiers
+judge it side by side: the English GLiNER2.5-Decide and the multilingual
+GLiNER2.5-multi-Decide, each with and without our fine-tuned adapter. The player then
 votes on whether the prompt should have been blocked. Every submission and vote is stored
 so it can be labelled and added to the training set later.
 
-Both contestants share one copy of the base weights. The adapter is wrapped with PEFT
-and switched off for the base model's turn, which reproduces a separately loaded base
+Each base model and its adapter share one copy of the weights. The adapter is wrapped with
+PEFT and switched off for the base model's turn, which reproduces a separately loaded base
 model exactly while using half the memory. Switching changes shared model state, so
 inference runs one request at a time behind a lock.
 
 Run locally:
     uv run --group demo uvicorn demo.app:app --reload
 Environment:
-    ADAPTER_PATH   LoRA adapter directory (default models/gliner-erp/best)
+    ADAPTER_PATH        English LoRA adapter (default models/gliner-erp/best)
+    MULTI_ADAPTER_PATH  multilingual LoRA adapter (default models/gliner-erp-multi/best)
     DATA_DIR       where prompts.db lives (default demo_data/; mount a volume here)
     ADMIN_TOKEN    enables GET /admin/export.csv?token=...; export is off when unset
 """
@@ -42,9 +44,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "poc"))
 # Same input format and schema as training and evaluation, so the demo scores exactly
 # what the eval measured.
-from train_gliner import BASE_MODEL, ERP_CATEGORIES, ROLES, inference_schema, model_input  # noqa: E402
+from train_gliner import (BASE_MODEL, ERP_CATEGORIES, MULTI_BASE_MODEL, ROLES,  # noqa: E402
+                          inference_schema, model_input)
 
 ADAPTER_PATH = Path(os.environ.get("ADAPTER_PATH", ROOT / "models" / "gliner-erp" / "best"))
+MULTI_ADAPTER_PATH = Path(os.environ.get("MULTI_ADAPTER_PATH",
+                                         ROOT / "models" / "gliner-erp-multi" / "best"))
 DATA_DIR = Path(os.environ.get("DATA_DIR", ROOT / "demo_data"))
 ADMIN_TOKEN = os.environ.get("ADMIN_TOKEN", "")
 MAX_CHARS = 2000
@@ -53,9 +58,11 @@ RATE_WINDOW_S = 60
 VOTES = ("block", "allow")   # the player's answer to "should this have been blocked?"
 
 SCHEMA = inference_schema(ERP_CATEGORIES, with_usage=True)
-COLUMNS = ["created_at", "text", "role", "vote",
-           "base_category", "base_confidence", "base_module", "base_intent",
-           "ft_category", "ft_confidence", "ft_module", "ft_intent"]
+# Contestant id -> (base model, adapter or None). The ids prefix the stored columns.
+CONTESTANTS = {"base": (BASE_MODEL, None), "ft": (BASE_MODEL, ADAPTER_PATH),
+               "mbase": (MULTI_BASE_MODEL, None), "mft": (MULTI_BASE_MODEL, MULTI_ADAPTER_PATH)}
+FIELDS = ["category", "confidence", "module", "intent"]
+COLUMNS = ["created_at", "text", "role", "vote"] + [f"{c}_{f}" for c in CONTESTANTS for f in FIELDS]
 # Kept so databases from the first version still load. "attempt" was the player's stated
 # goal, chosen before seeing the verdicts; new rows leave it empty.
 LEGACY_COLUMNS = ["attempt"]
@@ -80,17 +87,19 @@ def init_db() -> None:
         have = {r["name"] for r in conn.execute("PRAGMA table_info(submissions)")}
         for col in COLUMNS + LEGACY_COLUMNS + ["vote_key"]:
             if col not in have:
-                conn.execute(f"ALTER TABLE submissions ADD COLUMN {col} TEXT")
+                kind = "REAL" if col.endswith("confidence") else "TEXT"
+                conn.execute(f"ALTER TABLE submissions ADD COLUMN {col} {kind}")
 
 
 def load_models() -> None:
     from gliner2 import AutoExtractor
     from peft import PeftModel
 
-    base = AutoExtractor.from_pretrained(BASE_MODEL)
-    peft_model = PeftModel.from_pretrained(base, str(ADAPTER_PATH))
-    peft_model.eval()
-    state["extractor"], state["peft"] = base, peft_model
+    for name, adapter in {BASE_MODEL: ADAPTER_PATH, MULTI_BASE_MODEL: MULTI_ADAPTER_PATH}.items():
+        base = AutoExtractor.from_pretrained(name)
+        peft_model = PeftModel.from_pretrained(base, str(adapter))
+        peft_model.eval()
+        state[name] = (base, peft_model)
 
 
 @asynccontextmanager
@@ -118,15 +127,19 @@ class Vote(BaseModel):
 
 
 def classify(text: str, role: str) -> dict:
-    extractor, peft_model = state["extractor"], state["peft"]
     x = model_input(text, role)
-    with model_lock:
-        with peft_model.disable_adapter():
-            base = extractor.classify_text(x, SCHEMA, include_confidence=True)
-        tuned = extractor.classify_text(x, SCHEMA, include_confidence=True)
     flat = lambda o: {k: o[k]["label"] for k in ("category", "module", "intent")} | {
         "confidence": round(o["category"]["confidence"], 4)}
-    return {"base": flat(base), "ft": flat(tuned)}
+    out = {}
+    with model_lock:
+        for cid, (name, adapter) in CONTESTANTS.items():
+            extractor, peft_model = state[name]
+            if adapter:
+                out[cid] = flat(extractor.classify_text(x, SCHEMA, include_confidence=True))
+            else:
+                with peft_model.disable_adapter():
+                    out[cid] = flat(extractor.classify_text(x, SCHEMA, include_confidence=True))
+    return out
 
 
 _hits: dict[str, deque] = defaultdict(deque)
@@ -151,7 +164,7 @@ def index():
 
 @app.get("/health")
 def health():
-    return {"ok": "peft" in state}
+    return {"ok": MULTI_BASE_MODEL in state}
 
 
 @app.get("/api/options")
@@ -169,10 +182,8 @@ async def battle(body: Battle, request: Request):
     check_rate(request)
 
     result = await run_in_threadpool(classify, text, body.role)
-    b, f = result["base"], result["ft"]
-    row = [datetime.now(timezone.utc).isoformat(timespec="seconds"), text, body.role, None,
-           b["category"], b["confidence"], b["module"], b["intent"],
-           f["category"], f["confidence"], f["module"], f["intent"]]
+    row = [datetime.now(timezone.utc).isoformat(timespec="seconds"), text, body.role, None]
+    row += [result[c][f] for c in CONTESTANTS for f in FIELDS]
     # The key lets only this player's browser vote on this submission.
     key = secrets.token_urlsafe(16)
     with db() as conn:
@@ -197,19 +208,18 @@ def vote(body: Vote):
 
 @app.get("/api/stats")
 def stats():
-    """Scored against the players' votes, cast after seeing both verdicts. Should block:
+    """Scored against the players' votes, cast after seeing the verdicts. Should block:
     how often each model flagged a prompt players said should be blocked. Fine: how often
-    each model flagged a prompt players said was fine. Unvoted prompts are not scored."""
+    each model flagged a prompt players said was fine. Unvoted prompts are not scored.
+    Rows from before a contestant existed have no verdict for it and are not counted."""
+    per = ", ".join(
+        f"SUM(vote = 'block' AND {c}_category != 'benign') AS {c}_caught, "
+        f"SUM(vote = 'allow' AND {c}_category != 'benign') AS {c}_false_alarms, "
+        f"SUM(vote = 'block' AND {c}_category IS NOT NULL) AS {c}_should_block, "
+        f"SUM(vote = 'allow' AND {c}_category IS NOT NULL) AS {c}_fine" for c in CONTESTANTS)
     with db() as conn:
-        r = conn.execute("""SELECT
-            COUNT(*) AS total,
-            SUM(vote = 'block') AS should_block,
-            SUM(vote = 'block' AND base_category != 'benign') AS base_caught,
-            SUM(vote = 'block' AND ft_category != 'benign') AS ft_caught,
-            SUM(vote = 'allow') AS fine,
-            SUM(vote = 'allow' AND base_category != 'benign') AS base_false_alarms,
-            SUM(vote = 'allow' AND ft_category != 'benign') AS ft_false_alarms
-            FROM submissions""").fetchone()
+        r = conn.execute(f"""SELECT COUNT(*) AS total, SUM(vote = 'block') AS should_block,
+            SUM(vote = 'allow') AS fine, {per} FROM submissions""").fetchone()
     return {k: r[k] or 0 for k in r.keys()}
 
 

@@ -2,9 +2,12 @@
 
 A public one-page web app where visitors write prompts for an ERP assistant and see how
 the classifier that guards it judges them.
-Each round assigns a random ERP role, which the models see, because data snooping
-depends on who is asking. The base GLiNER2.5-Decide model and the fine-tuned adapter in
-`models/gliner-erp/best` judge the prompt side by side. The player then votes on whether
+The player picks an ERP role (or takes a random one), which the models see, because data
+snooping depends on who is asking. Four models judge the prompt side by side: the English
+GLiNER2.5-Decide and the multilingual GLiNER2.5-multi-Decide, each with and without our
+adapter (`models/gliner-erp/best` and `models/gliner-erp-multi/best`). The multilingual
+adapter is trained on `data/erp_train.csv` plus `data/erp_train_multi.csv`, built by
+`poc/build_multilingual.py`. Both base models together need about 2.5 GB of RAM. The player then votes on whether
 it should have been blocked, and the scoreboard counts how often each model agreed.
 Every submission and vote is stored for later labelling and retraining.
 

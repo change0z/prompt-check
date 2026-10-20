@@ -221,11 +221,14 @@ __marimo__/
 data/
 results/
 
-# Trained GLiNER adapters (poc/train_gliner.py). Only the best adapter is tracked.
+# Trained GLiNER adapters (poc/train_gliner.py). Only the best adapters are tracked.
 models/*
 !models/gliner-erp/
 models/gliner-erp/*
 !models/gliner-erp/best/
+!models/gliner-erp-multi/
+models/gliner-erp-multi/*
+!models/gliner-erp-multi/best/
 
 # Demo submissions (demo/app.py)
 demo_data/

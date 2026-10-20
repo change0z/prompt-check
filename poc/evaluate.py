@@ -26,6 +26,8 @@ Classifiers:
 Writes metrics to results/<classifier>.json and prints a report.
 Usage: uv run python poc/evaluate.py [--models tfidf zeroshot protectai gliner] [--limit N]
        uv run python poc/evaluate.py --dataset erp --models gliner --adapter models/gliner-erp/best
+       uv run python poc/evaluate.py --dataset erp-multi --models gliner \
+           --base-model fastino/GLiNER2.5-multi-Decide --adapter models/gliner-erp-multi/best
 
 '''
 
@@ -45,6 +47,7 @@ from sklearn.pipeline import make_pipeline
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "prompts.parquet"
 ERP_DATA = ROOT / "eval" / "erp_eval.csv"
+ERP_MULTI_DATA = ROOT / "eval" / "erp_eval_multi.csv"
 RESULTS = ROOT / "results"
 CATEGORIES = ["benign", "prompt_injection", "jailbreak", "harmful"]
 
@@ -105,13 +108,13 @@ def run_protectai(texts: list[str]):
     return timed(lambda t: clf(t)[0]["label"], texts)
 
 
-def run_gliner(test: pd.DataFrame, adapter: str | None):
+def run_gliner(test: pd.DataFrame, adapter: str | None, base_model: str):
     """One call per prompt returning category, plus module and intent when the set has
     them. The role is prepended when present, exactly as train_gliner.py trains it."""
     from gliner2 import AutoExtractor
-    from train_gliner import BASE_MODEL, CATEGORY_DESCRIPTIONS, inference_schema, model_input
+    from train_gliner import CATEGORY_DESCRIPTIONS, inference_schema, model_input
 
-    model = AutoExtractor.from_pretrained(BASE_MODEL)
+    model = AutoExtractor.from_pretrained(base_model)
     if adapter:
         model.load_adapter(adapter)
     # Offer only the taxonomy of the set in use, in training order: the ERP categories
@@ -134,6 +137,26 @@ def usage_accuracy(test: pd.DataFrame, outputs: list[dict]) -> dict:
         print(f"{col} accuracy: {scores[col]:.3f}")
     print()
     return scores
+
+
+def by_lang(test: pd.DataFrame, preds: list[str], outputs: list[dict] | None) -> dict:
+    """Per-language accuracy, plus the blocking errors that matter most: attacks let
+    through (missed) and benign prompts blocked (false alarms)."""
+    t = test.assign(pred=preds).reset_index(drop=True)
+    if outputs:
+        t["pred_module"] = [o["module"] for o in outputs]
+        t["pred_intent"] = [o["intent"] for o in outputs]
+    out = {}
+    for lang, g in t.groupby("lang"):
+        attack, flagged = g["category"] != "benign", g["pred"] != "benign"
+        out[lang] = {
+            "n": len(g),
+            "category_acc": (g["pred"] == g["category"]).mean(),
+            "missed_attacks": (attack & ~flagged).sum() / max(attack.sum(), 1),
+            "false_alarms": (~attack & flagged).sum() / max((~attack).sum(), 1),
+        } | ({"module_acc": (g["pred_module"] == g["module"]).mean(),
+              "intent_acc": (g["pred_intent"] == g["intent"]).mean()} if outputs else {})
+    return {k: {m: float(v) for m, v in d.items()} for k, d in out.items()}
 
 
 def latency_stats(latencies: list[float]) -> dict:
@@ -205,15 +228,19 @@ def main() -> None:
                         help="gliner only: LoRA adapter directory from poc/train_gliner.py")
     parser.add_argument("--limit", type=int, default=None,
                         help="evaluate on a random sample of N test prompts")
-    parser.add_argument("--dataset", default="public", choices=["public", "erp"],
+    parser.add_argument("--base-model", default=None,
+                        help="gliner only: base model (default the English GLiNER2.5-Decide)")
+    parser.add_argument("--dataset", default="public", choices=["public", "erp", "erp-multi"],
                         help="public = held-out split of the HF datasets; "
-                             "erp = the hand-reviewed synthetic ERP set")
+                             "erp = the hand-reviewed synthetic ERP set; "
+                             "erp-multi = the Sage X3 style set in en, fr, es, de and pt")
     args = parser.parse_args()
 
     # tfidf always trains on the public train split; only the test set changes.
     df = pd.read_parquet(DATA)
     train = df[df["split"] == "train"]
-    test = df[df["split"] == "test"] if args.dataset == "public" else pd.read_csv(ERP_DATA)
+    test = {"public": lambda: df[df["split"] == "test"], "erp": lambda: pd.read_csv(ERP_DATA),
+            "erp-multi": lambda: pd.read_csv(ERP_MULTI_DATA)}[args.dataset]()
     if args.limit:
         test = test.sample(n=min(args.limit, len(test)), random_state=42)
     texts = test["text"].tolist()
@@ -229,12 +256,20 @@ def main() -> None:
             preds, lat = run_zeroshot(texts)
             result = report_multiclass(name, test, preds, lat)
         elif name == "gliner":
+            from train_gliner import BASE_MODEL
+            base_model = args.base_model or BASE_MODEL
+            if base_model != BASE_MODEL:
+                name = "gliner_multi"
             if args.adapter:
-                name = "gliner_ft"
-            preds, lat, outputs = run_gliner(test, args.adapter)
+                name += "_ft"
+            preds, lat, outputs = run_gliner(test, args.adapter, base_model)
             result = report_multiclass(name, test, preds, lat)
             if outputs:
                 result["usage_accuracy"] = usage_accuracy(test, outputs)
+            if "lang" in test.columns:
+                result["by_lang"] = by_lang(test, preds, outputs)
+                print(pd.DataFrame(result["by_lang"]).T.round(3), "\n")
+            result["base_model"] = base_model
             if args.adapter:
                 result["adapter"] = args.adapter
         else:
@@ -248,7 +283,7 @@ def main() -> None:
             wrong = test.assign(pred=preds)
             wrong = wrong[wrong["pred"] != wrong["category"]]
             # "source" exists in the public set, "role"/"notes" in the ERP one.
-            cols = [c for c in ("text", "category", "pred", "source", "role", "notes")
+            cols = [c for c in ("text", "category", "pred", "source", "role", "lang", "notes")
                     if c in wrong.columns]
             result["errors_sample"] = (
                 wrong[cols].head(25)

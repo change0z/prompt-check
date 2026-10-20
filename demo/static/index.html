@@ -19,8 +19,9 @@
   @font-face { font-family: "VT323"; src: url(/static/fonts/vt323-latin.woff2) format("woff2"); font-weight: 400; font-display: swap; }
 
   /* Two colours only: paper and ink. Greys are ink mixed into paper or drawn as dither patterns. */
-  :root {
-    --paper: #f2ece0; --ink: #1c2a78;
+  :root, .inverse, .menu {
+    --c-paper: #f2ece0; --c-ink: #1c2a78;
+    --paper: var(--c-paper); --ink: var(--c-ink);
     --muted: color-mix(in srgb, var(--ink) 62%, var(--paper));
     --faint: color-mix(in srgb, var(--ink) 14%, var(--paper));
     --dots: radial-gradient(var(--ink) 0.7px, transparent 0.9px) 0 0 / 4px 4px;
@@ -54,6 +55,8 @@
   .win-title::before, .win-title::after { content: ""; flex: none; width: 13px; height: 13px; border: 2px solid var(--ink); background: var(--paper); box-shadow: 0 0 0 3px var(--paper); }
   .win-title span { margin: 0 auto; padding: 0 10px; background: var(--paper); font: 19px/16px var(--pixel); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .win-body { padding: 14px 16px; }
+  /* An ink screen: the two colours swap, and every token derived from them follows */
+  .inverse { --paper: var(--c-ink); --ink: var(--c-paper); background: var(--paper); color: var(--ink); }
 
   /* Scroll reveal: windows zoom open from the title bar in chunky steps, like the old desktop */
   .js .reveal:not(.in) { opacity: 0; }
@@ -143,11 +146,40 @@
   .side { display: grid; gap: 22px; justify-items: start; }
   .guide { display: flex; align-items: flex-end; gap: 14px; }
   .guide .bubble { margin-bottom: 14px; max-width: 280px; }
-  .who { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; font: 20px/1.25 var(--pixel); }
-  .who strong { font-weight: 400; color: var(--paper); background: var(--ink); padding: 0 6px; }
-  textarea { width: 100%; min-height: 120px; resize: vertical; font: 15px/1.5 var(--mono); color: var(--ink); caret-color: var(--ink); background: var(--paper); border: 2px solid var(--ink); padding: 10px 12px; }
+  .who { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font: 21px/1.25 var(--pixel); }
+  /* Role pop-up menu, after the classic desktop: zooms open, the chosen item blinks */
+  .cmd { position: relative; }
+  .pick { position: relative; display: inline-block; }
+  .role-btn { font: inherit; color: var(--paper); background: var(--ink); border: 0; padding: 0 6px; cursor: pointer; }
+  .role-btn:hover, .role-btn[aria-expanded="true"] { outline: 1px dashed var(--ink); outline-offset: 2px; }
+  .role-btn.pop { animation: pop 0.25s steps(3); }
+  .menu { position: absolute; left: -4px; top: calc(100% + 8px); z-index: 30; min-width: 300px; background: var(--paper); color: var(--ink); border: 2px solid var(--ink); box-shadow: var(--shadow); padding: 4px 0; font: 20px/1.2 var(--pixel); }
+  .menu[hidden] { display: none; }
+  .menu.open { animation: menu-open 0.16s steps(4) both; }
+  @keyframes menu-open { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(-4px -10px -10px -4px); } }
+  .menu .item { display: flex; align-items: baseline; gap: 6px; padding: 3px 14px 3px 8px; cursor: pointer; white-space: nowrap; }
+  .menu .tick { width: 16px; flex: none; }
+  .menu .item small { margin-left: auto; padding-left: 18px; font-size: 17px; color: var(--muted); }
+  .menu .item:focus { background: var(--ink); color: var(--paper); outline: none; }
+  .menu .item:focus small { color: inherit; }
+  .menu .item.blink { animation: item-blink 0.3s steps(1); }
+  @keyframes item-blink { 0%, 50% { background: var(--paper); color: var(--ink); } 25%, 75% { background: var(--ink); color: var(--paper); } }
+  .menu .sep { border-top: 1px dotted var(--ink); margin: 4px 0; }
+  .inverse .t-dim { color: var(--muted); }
+  /* The prompt box is a terminal line: a ">" prompt and the pixel font of the hero session.
+     It sits inside an .inverse screen, so --ink is the light colour here. */
+  .term-input { position: relative; }
+  .term-input::before { content: ">"; position: absolute; left: 0; top: 8px; font: 23px/1.25 var(--pixel); }
+  textarea { width: 100%; min-height: 130px; resize: vertical; font: 23px/1.25 var(--pixel); color: var(--ink); caret-color: transparent; background: transparent; border: 0; border-bottom: 1px dashed var(--muted); padding: 8px 4px 8px 22px; }
   textarea::placeholder { color: var(--muted); }
-  textarea:focus { outline: none; box-shadow: inset 0 0 0 1px var(--ink); }
+  textarea::selection { background: var(--ink); color: var(--paper); }
+  textarea:focus { outline: none; border-bottom: 1px solid var(--ink); }
+  /* Block cursor drawn over the textarea at the caret, found with a hidden mirror of the text.
+     It shows the character beneath it in the screen colour, as a terminal does. */
+  .mirror { position: absolute; top: 0; left: 0; visibility: hidden; white-space: pre-wrap; overflow-wrap: break-word; pointer-events: none; }
+  .caret { position: absolute; z-index: 1; width: 0.5em; font: 23px/1.25 var(--pixel); text-align: center; color: var(--paper); background: var(--ink); pointer-events: none; animation: blink 1s steps(1) infinite; }
+  .caret.typing { animation: none; }
+  .term-input:not(:focus-within) .caret { color: transparent; background: transparent; box-shadow: inset 0 0 0 1px var(--ink); animation: none; }
   .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; font: 18px var(--pixel); color: var(--muted); }
   kbd { font: inherit; color: var(--ink); border: 1px solid var(--ink); border-bottom-width: 2px; padding: 0 4px; }
   /* Buttons: rounded, as on the old desktop; the default button gets a second ring */
@@ -176,7 +208,8 @@
 
   .duel { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: start; }
   .model .win-body { min-height: 250px; font: 20px/1.25 var(--pixel); }
-  .model .who-line { font-size: 18px; color: var(--muted); margin-bottom: 12px; }
+  .model .who-line { font-size: 19px; margin-bottom: 2px; overflow-wrap: anywhere; }
+  .model .who-line.note { color: var(--muted); margin-bottom: 12px; }
   .decision { font: 50px/1 var(--pixel); letter-spacing: 0.06em; padding: 6px 12px 2px; margin-bottom: 14px; display: inline-block; border: 2px solid var(--ink); }
   .decision.blocked { background: var(--ink); color: var(--paper); }
   .decision.waiting { border-color: transparent; color: var(--muted); font-size: 26px; padding: 6px 0; }
@@ -190,8 +223,14 @@
   .segs i.on { background: var(--ink); opacity: 1; }
   .yes { color: var(--paper); background: var(--ink); padding: 0 6px; }
   .no { border: 1px solid var(--ink); padding: 0 5px; text-decoration: line-through; }
-  .model.fresh .win-body { animation: flash 0.32s steps(2); }
-  @keyframes flash { 0% { filter: invert(1); } 100% { filter: none; } }
+  /* Results print top to bottom like terminal output; the verdict blinks in like a stamp */
+  .print { animation: print 0.18s steps(3) backwards; }
+  @keyframes print { from { opacity: 0; clip-path: inset(0 0 100% 0); } }
+  .decision.print { animation: stamp 0.4s steps(1) backwards; }
+  @keyframes stamp { 0%, 50% { opacity: 0; } 25%, 75%, 100% { opacity: 1; } }
+  .loadbar { display: inline-flex; gap: 2px; vertical-align: middle; margin-left: 10px; }
+  .loadbar i { width: 10px; height: 16px; border: 1px solid var(--ink); animation: load 1s steps(1) infinite; }
+  @keyframes load { 0% { background: var(--ink); } 30% { background: transparent; } }
 
   .dialog { max-width: 540px; justify-self: center; width: 100%; }
   .dialog[hidden] { display: none; }
@@ -215,10 +254,10 @@
   .rule .tok.ink { background: var(--ink); color: var(--paper); }
   .rule .pt { font-size: 26px; }
   .rule .sep { color: var(--muted); }
-  .bignums { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .bignums { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
   .bignum { border-left: 6px solid var(--ink); padding-left: 18px; }
-  .bignum.b { border-left-style: dotted; }
-  .bignum .val { font: clamp(80px, 13vw, 170px)/0.9 var(--pixel); }
+  .bignum.base, .bignum.mbase { border-left-style: dotted; }
+  .bignum .val { font: clamp(64px, 8vw, 120px)/0.9 var(--pixel); }
   .bignum .lbl { font: italic 24px var(--serif); }
   .bignum small { display: block; color: var(--muted); font-size: 13px; }
   .chart { margin-top: 44px; max-width: 840px; }
@@ -226,11 +265,14 @@
   .chart .total { color: var(--muted); margin-bottom: 14px; }
   .chart .metric { margin-bottom: 18px; }
   .chart .name { font-size: 20px; margin-bottom: 6px; }
-  .chart .line { display: grid; grid-template-columns: 120px 1fr 90px; gap: 10px; align-items: center; margin-bottom: 4px; }
+  .chart .line { display: grid; grid-template-columns: 210px 1fr 90px; gap: 10px; align-items: center; margin-bottom: 4px; }
   .bar { display: grid; grid-template-columns: repeat(20, 1fr); gap: 2px; }
   .bar i { height: 14px; border: 1px solid var(--faint); }
+  /* One fill per contestant, since there are only two colours: checker, solid, dots, hatch */
   .bar.base i.on { background: var(--checker); border-color: var(--ink); }
   .bar.ft i.on { background: var(--ink); border-color: var(--ink); }
+  .bar.mbase i.on { background: var(--dots); border-color: var(--ink); }
+  .bar.mft i.on { background: repeating-linear-gradient(45deg, var(--ink) 0 2px, transparent 2px 4px); border-color: var(--ink); }
   .bar i.on { transition: background 0s calc(var(--i) * 45ms + 300ms), border-color 0s calc(var(--i) * 45ms + 300ms); }
   .js .chart:not(.in) .bar i.on { background: none; border-color: var(--faint); }
   .chart .num { text-align: right; }
@@ -279,6 +321,7 @@
   @media (max-width: 900px) {
     .hero { grid-template-columns: 1fr; min-height: 0; padding-top: 48px; }
     .duel { grid-template-columns: 1fr; }
+    .bignums { grid-template-columns: 1fr 1fr; }
     .about-grid { grid-template-columns: 1fr 1fr; }
     .margin-code { display: none; }
     .pipeline { grid-template-columns: 1fr; justify-items: center; }
@@ -290,6 +333,8 @@
   @media (max-width: 600px) {
     .menubar .links { display: none; }
     .term .win-body { height: 290px; font-size: 19px; }
+    .pick { position: static; }
+    .menu { left: 0; right: 0; min-width: 0; }
     .term-wrap .perch { right: 8px; }
     .side { grid-template-columns: minmax(0, 1fr); }
     .guide .bubble { flex: 1; min-width: 0; }
@@ -298,9 +343,10 @@
     .access table { border-spacing: 3px; }
     .access td.c { width: 15px; height: 15px; }
     .access td.r { padding-right: 4px; }
-    .about-grid, .bignums, .checks { grid-template-columns: 1fr; }
+    .about-grid, .checks { grid-template-columns: 1fr; }
     .about-grid .wide { grid-column: auto; }
-    .chart .line { grid-template-columns: 90px 1fr 56px; }
+    .chart .line { grid-template-columns: 1fr 56px; }
+    .chart .line .bar { grid-column: 1 / -1; grid-row: 2; }
     .arena { padding-top: 48px; }
     .decision { font-size: 42px; }
     .dialog .win-body { grid-template-columns: 1fr; }
@@ -380,14 +426,13 @@
     <div class="stage">
       <div class="top">
         <form class="win composer" id="form">
-          <div class="win-title"><span>prompt.txt</span></div>
-          <div class="win-body">
+          <div class="win-title"><span>promptcheck: your session</span></div>
+          <div class="win-body inverse">
             <div class="who">
-              <div>You are: <strong id="role-name"></strong></div>
-              <button type="button" class="btn small" id="reroll">Change role</button>
+              <div class="cmd"><span class="t-dim">$</span> promptcheck --role <span class="pick"><button type="button" class="role-btn" id="role-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="role-menu"><span id="role-name"></span> ▾</button><div class="menu" id="role-menu" role="listbox" aria-label="Choose a role" hidden></div></span> <span class="t-dim"># pick a role</span></div>
             </div>
             <label for="text" style="position:absolute;left:-9999px">Your prompt</label>
-            <textarea id="text" required placeholder="Ask the ERP assistant anything. Something routine, or something it should refuse."></textarea>
+            <div class="term-input"><div class="mirror" id="mirror" aria-hidden="true"></div><span class="caret" id="caret" aria-hidden="true"></span><textarea id="text" required placeholder="ask the ERP assistant anything, in English, French, Spanish, German or Portuguese. something routine, or something it should refuse."></textarea></div>
             <div class="row">
               <span><kbd>Enter</kbd> submit &nbsp;<kbd>Shift</kbd>+<kbd>Enter</kbd> new line <span id="count"></span></span>
               <button type="submit" class="btn default" id="go">Check prompt</button>
@@ -409,19 +454,15 @@
       </div>
 
       <div class="duel" aria-live="polite">
-        <div class="win model" id="base">
-          <div class="win-title"><span>base model</span></div>
-          <div class="win-body"></div>
-        </div>
-        <div class="win model" id="ft">
-          <div class="win-title"><span>fine-tuned for ERP</span></div>
-          <div class="win-body"></div>
-        </div>
+        <div class="win model" id="base"><div class="win-title"><span>English · base</span></div><div class="win-body inverse"></div></div>
+        <div class="win model" id="ft"><div class="win-title"><span>English · fine-tuned</span></div><div class="win-body inverse"></div></div>
+        <div class="win model" id="mbase"><div class="win-title"><span>Multilingual · base</span></div><div class="win-body inverse"></div></div>
+        <div class="win model" id="mft"><div class="win-title"><span>Multilingual · fine-tuned</span></div><div class="win-body inverse"></div></div>
       </div>
 
       <div class="win dialog" id="vote" hidden>
         <div class="win-title"><span>Your call</span></div>
-        <div class="win-body">
+        <div class="win-body inverse">
           <div class="icon" aria-hidden="true">?</div>
           <div><p>Should this prompt have been blocked?</p></div>
           <div class="buttons">
@@ -443,10 +484,7 @@
     <span class="tok ink">model: BLOCK</span><span class="pt">+1</span><span class="sep">·</span>
     <span class="tok">model: ALLOW</span><span class="pt">+0</span>
   </div>
-  <div class="bignums rise reveal" id="nums">
-    <div class="bignum b"><div class="val" id="p-base">--</div><div class="lbl">base model</div><small>GLiNER2.5-Decide, no training</small></div>
-    <div class="bignum f"><div class="val" id="p-ft">--</div><div class="lbl">fine-tuned</div><small>same model plus our ERP adapter</small></div>
-  </div>
+  <div class="bignums rise reveal" id="nums"></div>
   <div class="win chart reveal" id="chart-win">
     <div class="win-title"><span>score.log</span></div>
     <div class="win-body"><div class="total" id="s-total"></div><div id="chart"></div></div>
@@ -494,6 +532,17 @@
         <dt>real data</dt><dd>none</dd>
         <dt>result</dt><dd>fewer false alarms, far better area and intent</dd>
       </dl>
+    </div></div>
+    <div class="win reveal"><div class="win-title"><span>multilingual-model</span></div><div class="win-body">
+      <dl class="spec">
+        <dt>model</dt><dd>GLiNER2.5-multi-Decide</dd>
+        <dt>by</dt><dd>Fastino</dd>
+        <dt>size</dt><dd>287M params</dd>
+        <dt>languages</dt><dd>multilingual; we test en, fr, es, de, pt</dd>
+        <dt>adapter</dt><dd>LoRA, same recipe as English</dd>
+        <dt>licence</dt><dd>Apache 2.0</dd>
+      </dl>
+      <div class="links-row"><a href="https://huggingface.co/fastino/GLiNER2.5-multi-Decide" target="_blank" rel="noopener">Hugging Face</a></div>
     </div></div>
     <div class="win reveal"><div class="win-title"><span>the-string-in-the-margin</span></div><div class="win-body">
       <p>A prompt injection, base64 encoded. Decode it and see if either model notices.</p>
@@ -669,21 +718,31 @@ const chip = (group, k) => `<a class="chip" href="#${group}-${k}" data-key="${gr
 const segs = (frac, n = 10) => `<span class="segs">${Array.from({length: n}, (_, i) => `<i class="${i < Math.round(frac * n) ? "on" : ""}"></i>`).join("")}</span>`;
 
 // ---- Model windows ----
-const SUB = { base: "GLiNER2.5-Decide, no training", ft: "same model + our ERP adapter" };
+const MODELS = ["base", "ft", "mbase", "mft"];
+const SUB = {
+  base: "GLiNER2.5-Decide, no training", ft: "same model + our ERP adapter",
+  mbase: "GLiNER2.5-multi-Decide, no training", mft: "same model + our multilingual adapter",
+};
+const CMD = { base: "--model en", ft: "--model en --adapter erp", mbase: "--model multi", mft: "--model multi --adapter erp-multi" };
+const head = id => `<div class="who-line"><span class="t-dim">$</span> promptcheck ${CMD[id]}</div><div class="who-line note"># ${SUB[id]}</div>`;
+const NAME = { base: "English base", ft: "English fine-tuned", mbase: "multilingual base", mft: "multilingual fine-tuned" };
+// Hoot speaks for our newest model.
+const HOOT = "mft";
 let maxChars = 2000, roles = [], role = null, last = null, busy = false;
 
 function renderModel(id, state) {
   const body = $(id).querySelector(".win-body");
   if (state === "empty" || state === "loading") {
-    const msg = state === "loading" ? `thinking <span class="cursor"></span>` : `waiting for a prompt <span class="cursor"></span>`;
-    body.innerHTML = `<div class="who-line">${SUB[id]}</div><div class="decision waiting">${msg}</div>`;
+    const bar = `<span class="loadbar">${Array.from({length: 10}, (_, i) => `<i style="animation-delay:${i * 0.1}s"></i>`).join("")}</span>`;
+    const msg = state === "loading" ? `scanning${bar}` : `waiting for a prompt <span class="cursor"></span>`;
+    body.innerHTML = `${head(id)}<div class="decision waiting">${msg}</div>`;
     return;
   }
   const r = last[id], blocked = r.category !== "benign";
   let agree = `<span style="color:var(--muted)">vote below</span>`;
   if (last.vote) agree = (blocked === (last.vote === "block")) ? `<span class="yes">YES</span>` : `<span class="no">NO</span>`;
   body.innerHTML = `
-    <div class="who-line">${SUB[id]}</div>
+    ${head(id)}
     <div class="decision ${blocked ? "blocked" : "allowed"}">${blocked ? "BLOCKED" : "ALLOWED"}</div>
     <dl class="facts">
       <dt>Category</dt><dd>${chip("category", r.category)}</dd>
@@ -692,13 +751,23 @@ function renderModel(id, state) {
       <dt>Intent</dt><dd>${chip("intent", r.intent)}</dd>
       <dt>Agrees</dt><dd>${agree}</dd>
     </dl>`;
-  if (state === "fresh") { $(id).classList.remove("fresh"); void $(id).offsetWidth; $(id).classList.add("fresh"); }
+  // Fresh results print line by line, each window a beat after the one before it.
+  if (state === "fresh") {
+    const start = MODELS.indexOf(id) * 160, lines = [...body.querySelectorAll(".who-line, .decision")];
+    lines.forEach((el, i) => { el.classList.add("print"); el.style.animationDelay = `${start + i * 70}ms`; });
+    [...body.querySelectorAll(".facts > *")].forEach((el, k) => {
+      el.classList.add("print"); el.style.animationDelay = `${start + (lines.length + Math.floor(k / 2)) * 70}ms`;
+    });
+  }
 }
-const renderBoth = s => { renderModel("base", s); renderModel("ft", s); };
+const renderAll = s => MODELS.forEach(id => renderModel(id, s));
 
 function pickRole() {
   const others = roles.filter(r => r !== role);
-  role = others[Math.floor(Math.random() * others.length)];
+  setRole(others[Math.floor(Math.random() * others.length)]);
+}
+function setRole(r) {
+  role = r;
   $("role-name").textContent = role;
   document.querySelectorAll("#access tr[data-role]").forEach(tr => tr.classList.toggle("me", tr.dataset.role === role));
   setFace($("pg-bot"), "neutral");
@@ -711,22 +780,29 @@ function updateCount() {
 }
 
 // ---- Scoreboard ----
-let rates = [null, null];
+let rates = {};
 function countTo(el, v) {
   if (v === null) { el.textContent = "--"; return; }
   if (reduced) { el.textContent = v + "%"; return; }
   const from = parseInt(el.textContent) || 0, steps = 14;
   for (let i = 1; i <= steps; i++) setTimeout(() => { el.textContent = Math.round(from + (v - from) * i / steps) + "%"; }, i * 45);
 }
+function buildNums() {
+  $("nums").innerHTML = MODELS.map(id =>
+    `<div class="bignum ${id}"><div class="val" id="p-${id}">--</div><div class="lbl">${NAME[id]}</div><small>${SUB[id]}</small></div>`).join("");
+}
 function paintRates() {
   if (!$("nums").classList.contains("in")) return;
-  countTo($("p-base"), rates[0]); countTo($("p-ft"), rates[1]);
+  MODELS.forEach(id => countTo($("p-" + id), rates[id] ?? null));
 }
 
 function showStats(s) {
   const voted = s.should_block + s.fine;
-  const rate = (caught, fa) => voted ? Math.round(100 * (caught + s.fine - fa) / voted) : null;
-  rates = [rate(s.base_caught, s.base_false_alarms), rate(s.ft_caught, s.ft_false_alarms)];
+  // Each model is scored only on the votes cast while it was in the demo.
+  for (const id of MODELS) {
+    const n = s[id + "_should_block"] + s[id + "_fine"];
+    rates[id] = n ? Math.round(100 * (s[id + "_caught"] + s[id + "_fine"] - s[id + "_false_alarms"]) / n) : null;
+  }
   paintRates();
   $("s-total").textContent = `${plural(s.total, "prompt")} · ${voted} voted`;
   $("clock-count").textContent = `${plural(s.total, "prompt")}`;
@@ -734,25 +810,22 @@ function showStats(s) {
     const on = of ? Math.round(20 * v / of) : 0;
     return `<span class="bar ${cls}">${Array.from({length: 20}, (_, i) => `<i class="${i < on ? "on" : ""}" style="--i:${i}"></i>`).join("")}</span>`;
   };
-  const metric = (name, b, f, of) => `
+  const metric = (name, key, of) => `
     <div class="metric"><div class="name">${name}</div>
-      <div class="line"><span>base</span>${bar("base", b, of)}<span class="num">${b}/${of}</span></div>
-      <div class="line"><span>fine-tuned</span>${bar("ft", f, of)}<span class="num">${f}/${of}</span></div>
+      ${MODELS.map(id => `<div class="line"><span>${NAME[id]}</span>${bar(id, s[id + key], s[id + of])}<span class="num">${s[id + key]}/${s[id + of]}</span></div>`).join("")}
     </div>`;
   $("chart").innerHTML =
-    metric("Blocked when players said block", s.base_caught, s.ft_caught, s.should_block) +
-    metric("Blocked when players said fine (false alarms)", s.base_false_alarms, s.ft_false_alarms, s.fine) +
+    metric("Blocked when players said block", "_caught", "_should_block") +
+    metric("Blocked when players said fine (false alarms)", "_false_alarms", "_fine") +
     `<div class="foot">// prompts without a vote are stored but not scored</div>`;
 }
 
 function outcome(vote) {
   const shouldBlock = vote === "block";
-  const ok = id => (last[id].category !== "benign") === shouldBlock;
-  const b = ok("base"), f = ok("ft");
-  if (b && f) return "Both models agreed with you.";
-  if (f) return "Only the fine-tuned model agreed with you.";
-  if (b) return "Only the base model agreed with you.";
-  return shouldBlock ? "Neither model blocked it. You got past both." : "Both models blocked a prompt you think is fine.";
+  const ok = MODELS.filter(id => (last[id].category !== "benign") === shouldBlock);
+  if (ok.length === MODELS.length) return "All four models agreed with you.";
+  if (!ok.length) return shouldBlock ? "No model blocked it. You got past all four." : "All four blocked a prompt you think is fine.";
+  return `${ok.length} of 4 agreed with you: ${ok.map(id => NAME[id]).join(", ")}.`;
 }
 
 async function submit() {
@@ -761,7 +834,7 @@ async function submit() {
   busy = true;
   $("error").textContent = "";
   $("go").disabled = true;
-  renderBoth("loading");
+  renderAll("loading");
   setFace($("pg-bot"), "think"); say($("pg-say"), "Hmm, let me read that…");
   try {
     const res = await fetch("/api/battle", {
@@ -771,8 +844,8 @@ async function submit() {
     const data = await res.json();
     if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "That prompt was rejected.");
     last = data;
-    renderBoth("fresh");
-    const cat = data.ft.category;
+    renderAll("fresh");
+    const cat = data[HOOT].category;
     setFace($("pg-bot"), cat === "benign" ? "happy" : "stern");
     say($("pg-say"), cat === "benign" ? "Looks fine to me. Do you agree?" : `I'd block that: ${cat}. Do you agree?`);
     document.querySelectorAll("#vote [data-vote]").forEach(b => b.classList.remove("chosen"));
@@ -780,7 +853,7 @@ async function submit() {
     $("vote").hidden = false;
     showStats(data.stats);
   } catch (err) {
-    renderBoth(last ? "done" : "empty");
+    renderAll(last ? "done" : "empty");
     setFace($("pg-bot"), "neutral"); say($("pg-say"), "Something went wrong. Try again?");
     $("error").textContent = err.message;
   } finally {
@@ -800,8 +873,8 @@ async function castVote(vote) {
     if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : "Vote failed.");
     last.vote = vote;
     document.querySelectorAll("#vote [data-vote]").forEach(b => b.classList.toggle("chosen", b.dataset.vote === vote));
-    renderBoth("done");
-    const agreed = (last.ft.category !== "benign") === (vote === "block");
+    renderAll("done");
+    const agreed = (last[HOOT].category !== "benign") === (vote === "block");
     setFace($("pg-bot"), agreed ? "happy" : "think");
     say($("pg-say"), agreed ? "We agree. Try another?" : "Noted. That's how I learn.");
     $("outcome").textContent = outcome(vote) + " You can change your vote.";
@@ -817,11 +890,86 @@ $("text").addEventListener("keydown", e => {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
 });
 $("form").addEventListener("submit", e => { e.preventDefault(); submit(); });
-$("reroll").addEventListener("click", () => { pickRole(); $("text").focus(); });
+// ---- Role pop-up menu ----
+const menu = $("role-menu"), roleBtn = $("role-btn");
+function buildMenu() {
+  menu.innerHTML = roles.map(r =>
+    `<div class="item" role="option" tabindex="-1" data-role="${r}"><span class="tick"></span>${r}<small>${(ROLE_INFO[r] || [""])[0]}</small></div>`).join("") +
+    `<div class="sep" role="separator"></div><div class="item" role="option" tabindex="-1" data-role="*"><span class="tick">↻</span>random role</div>`;
+}
+function openMenu() {
+  for (const it of menu.querySelectorAll("[data-role]")) {
+    const on = it.dataset.role === role;
+    it.setAttribute("aria-selected", on);
+    if (it.dataset.role !== "*") it.querySelector(".tick").textContent = on ? "✓" : "";
+  }
+  menu.hidden = false;
+  menu.classList.remove("open"); void menu.offsetWidth; menu.classList.add("open");
+  roleBtn.setAttribute("aria-expanded", "true");
+  menu.querySelector(`[data-role="${role}"]`).focus();
+}
+function closeMenu(refocus) {
+  menu.hidden = true;
+  roleBtn.setAttribute("aria-expanded", "false");
+  if (refocus) roleBtn.focus();
+}
+async function choose(item) {
+  if (!reduced) { item.classList.add("blink"); await sleep(300); item.classList.remove("blink"); }
+  closeMenu(false);
+  item.dataset.role === "*" ? pickRole() : setRole(item.dataset.role);
+  roleBtn.classList.remove("pop"); void roleBtn.offsetWidth; roleBtn.classList.add("pop");
+  $("text").focus();
+}
+roleBtn.addEventListener("click", () => menu.hidden ? openMenu() : closeMenu(true));
+roleBtn.addEventListener("keydown", e => { if (e.key === "ArrowDown" && menu.hidden) { e.preventDefault(); openMenu(); } });
+menu.addEventListener("click", e => { const it = e.target.closest(".item"); if (it) choose(it); });
+menu.addEventListener("mouseover", e => { const it = e.target.closest(".item"); if (it) it.focus(); });
+menu.addEventListener("keydown", e => {
+  const items = [...menu.querySelectorAll(".item")], i = items.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    items[(i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length].focus();
+  } else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (i >= 0) choose(items[i]); }
+  else if (e.key === "Escape") { e.preventDefault(); closeMenu(true); }
+  else if (e.key === "Tab") closeMenu(false);
+});
+document.addEventListener("pointerdown", e => { if (!menu.hidden && !e.target.closest(".pick")) closeMenu(false); });
+
+// ---- Block cursor: mirror the text up to the caret to find where to draw it ----
+const ta = $("text"), caret = $("caret"), mirror = $("mirror");
+const MIRRORED = ["fontFamily", "fontSize", "lineHeight", "letterSpacing", "wordSpacing", "boxSizing", "width",
+  "paddingTop", "paddingRight", "paddingBottom", "paddingLeft", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth"];
+function placeCaret() {
+  const cs = getComputedStyle(ta);
+  for (const prop of MIRRORED) mirror.style[prop] = cs[prop];
+  mirror.style.borderStyle = "solid"; mirror.style.borderColor = "transparent";
+  mirror.style.width = ta.clientWidth + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth) + "px";
+  const pos = ta.selectionDirection === "backward" ? ta.selectionStart : ta.selectionEnd;
+  mirror.textContent = ta.value.slice(0, pos);
+  const mark = document.createElement("span");
+  mark.textContent = "\u200b";
+  mirror.append(mark);
+  const under = ta.value[pos];
+  caret.textContent = under && under !== "\n" ? under : "\u00a0";
+  caret.style.left = mark.offsetLeft + "px";
+  caret.style.top = mark.offsetTop - ta.scrollTop + "px";
+  caret.style.visibility = mark.offsetTop - ta.scrollTop < 0 || mark.offsetTop - ta.scrollTop > ta.clientHeight - 10 ? "hidden" : "visible";
+}
+let typingTimer;
+const caretSoon = () => requestAnimationFrame(placeCaret);
+for (const ev of ["input", "keyup", "click", "focus", "blur", "scroll", "select", "mouseup"]) ta.addEventListener(ev, caretSoon);
+ta.addEventListener("keydown", () => {
+  caret.classList.add("typing"); clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => caret.classList.remove("typing"), 600);
+  caretSoon();
+});
+document.addEventListener("selectionchange", () => { if (document.activeElement === ta) caretSoon(); });
+new ResizeObserver(caretSoon).observe(ta);
+document.fonts?.ready.then(caretSoon);
 document.querySelectorAll("#vote [data-vote]").forEach(btn => btn.addEventListener("click", () => castVote(btn.dataset.vote)));
 // Y and N vote from the keyboard, unless the player is typing in the prompt box.
 document.addEventListener("keydown", e => {
-  if ($("vote").hidden || e.target === $("text") || e.ctrlKey || e.metaKey || e.altKey) return;
+  if ($("vote").hidden || e.target === $("text") || e.target.closest?.(".menu") || e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.key === "y" || e.key === "Y") castVote("block");
   if (e.key === "n" || e.key === "N") castVote("allow");
 });
@@ -903,8 +1051,8 @@ function reveal() {
 }
 
 async function init() {
-  buildIndex(); buildAccess();
-  renderBoth("empty");
+  buildIndex(); buildAccess(); buildNums();
+  renderAll("empty");
   for (const id of ["hero-bot", "pl-bot", "pg-bot"]) { setFace($(id), "neutral"); blinker($(id)); }
   tick(); setInterval(tick, 10000);
   reveal();
@@ -913,7 +1061,9 @@ async function init() {
   maxChars = opts.max_chars;
   roles = opts.roles;
   $("text").maxLength = maxChars;
+  buildMenu();
   pickRole();
+  caretSoon();
   showStats(await (await fetch("/api/stats")).json());
 }
 init();

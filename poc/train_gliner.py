@@ -1,16 +1,17 @@
 """
-Fine-tune fastino/GLiNER2.5-Decide on ERP prompts with a LoRA adapter.
+Fine-tune fastino/GLiNER2.5-Decide (or its multilingual sibling) on ERP prompts with a
+LoRA adapter.
 
 The base model already scores 91.6 percent category accuracy on eval/erp_eval.csv with no
 training, but module and intent are weak (0.71 and 0.46). Training targets those, plus
 the two category errors that remain: benign prompts using security vocabulary in a
 business sense, and data snooping that only shows up once the role is known.
 
-Training data is a CSV with the same columns as eval/erp_eval.csv:
-    text, category, role, module, intent[, notes]
-written separately from the eval set (see docs/gliner-training-data-guide.md). The eval
-set is never trained on: this script refuses the eval file itself and drops any training
-row whose normalised text also appears in it.
+Training data is one or more CSVs with the same columns as eval/erp_eval.csv:
+    text, category, role, module, intent[, lang, notes]
+written separately from the eval sets (see docs/gliner-training-data-guide.md). The eval
+sets are never trained on: this script refuses the eval files themselves and drops any
+training row whose normalised text also appears in one. Rows without a lang are English.
 
 The model sees "User role: <role>. Request: <text>", so the role reaches the classifier
 the same way it reaches Claude in evaluate_llm.py. evaluate.py imports model_input and
@@ -19,9 +20,11 @@ inference_schema from here, so training and evaluation always use the same schem
 Usage:
     uv run python poc/train_gliner.py                          # data/erp_train.csv
     uv run python poc/train_gliner.py --train data/my.csv --epochs 8
+    uv run python poc/train_gliner.py --base-model fastino/GLiNER2.5-multi-Decide \
+        --train data/erp_train.csv data/x3_*.csv --output models/gliner-erp-multi
     uv run python poc/evaluate.py --dataset erp --models gliner --adapter models/gliner-erp/best
 
-Writes the adapter to models/gliner-erp/{best,final} (a few MB, not the full model).
+Writes the adapter to <output>/{best,final} (a few MB, not the full model).
 CPU only, matching the project's torch build. A few hundred rows train in minutes.
 """
 
@@ -37,9 +40,12 @@ from sklearn.model_selection import train_test_split
 
 ROOT = Path(__file__).resolve().parent.parent
 ERP_DATA = ROOT / "eval" / "erp_eval.csv"
+ERP_MULTI_DATA = ROOT / "eval" / "erp_eval_multi.csv"
+EVAL_SETS = [ERP_DATA, ERP_MULTI_DATA]
 TRAIN_DATA = ROOT / "data" / "erp_train.csv"
 OUTPUT = ROOT / "models" / "gliner-erp"
 BASE_MODEL = "fastino/GLiNER2.5-Decide"
+MULTI_BASE_MODEL = "fastino/GLiNER2.5-multi-Decide"
 
 # Label descriptions are part of the model input, so they must be identical at training
 # and inference. Wording follows the taxonomy in evaluate_llm.py. "harmful" is only used
@@ -87,8 +93,8 @@ def normalise(text: str) -> str:
 
 
 def load_training_csv(path: Path) -> pd.DataFrame:
-    if path.resolve() == ERP_DATA.resolve():
-        raise SystemExit(f"{path} is the held-out eval set and must not be trained on.")
+    if any(path.resolve() == e.resolve() for e in EVAL_SETS):
+        raise SystemExit(f"{path} is a held-out eval set and must not be trained on.")
     df = pd.read_csv(path)
     missing = [c for c in REQUIRED if c not in df.columns]
     if missing:
@@ -104,11 +110,12 @@ def load_training_csv(path: Path) -> pd.DataFrame:
     if errors:
         raise SystemExit("Labels outside the taxonomy:\n" + "\n".join(errors))
 
-    # Leakage control, as in build_dataset.py: the eval set wins any overlap.
-    eval_texts = set(pd.read_csv(ERP_DATA)["text"].map(normalise))
+    # Leakage control, as in build_dataset.py: the eval sets win any overlap.
+    eval_texts = set().union(*(set(pd.read_csv(e)["text"].map(normalise))
+                               for e in EVAL_SETS if e.exists()))
     leaked = df["text"].map(normalise).isin(eval_texts)
     if leaked.any():
-        print(f"dropping {leaked.sum()} training rows that also appear in {ERP_DATA.name}")
+        print(f"dropping {leaked.sum()} rows of {path.name} that also appear in an eval set")
     df = df[~leaked]
     # Contrast pairs share text but differ in role and label, so dedupe on both.
     dupes = pd.DataFrame({"t": df["text"].map(normalise), "r": df["role"]}).duplicated()
@@ -138,7 +145,9 @@ def to_examples(df: pd.DataFrame) -> list:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--train", type=Path, default=TRAIN_DATA)
+    parser.add_argument("--train", type=Path, nargs="+", default=[TRAIN_DATA])
+    parser.add_argument("--base-model", default=BASE_MODEL,
+                        help=f"e.g. {MULTI_BASE_MODEL} for the multilingual model")
     parser.add_argument("--output", type=Path, default=OUTPUT)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=8)
@@ -147,9 +156,16 @@ def main() -> None:
     parser.add_argument("--lora-r", type=int, default=16)
     args = parser.parse_args()
 
-    df = load_training_csv(args.train)
+    df = pd.concat([load_training_csv(p) for p in args.train], ignore_index=True)
+    df["lang"] = df["lang"].fillna("en") if "lang" in df.columns else "en"
+    # Contrast pairs share text but differ in role, so dedupe across files on both.
+    dupes = pd.DataFrame({"t": df["text"].map(normalise), "r": df["role"]}).duplicated()
+    if dupes.any():
+        print(f"dropping {dupes.sum()} rows duplicated across training files")
+    df = df[~dupes]
     print(f"{len(df)} training rows\n")
     print(pd.crosstab(df["category"], df["role"], margins=True), "\n")
+    print(pd.crosstab(df["category"], df["lang"], margins=True), "\n")
 
     # Stratify so every category reaches the validation split; fall back when a
     # category is too small to split.
@@ -160,7 +176,7 @@ def main() -> None:
     from gliner2 import AutoExtractor
     from gliner2.training.trainer import ExtractorTrainer, TrainingConfig
 
-    model = AutoExtractor.from_pretrained(BASE_MODEL)
+    model = AutoExtractor.from_pretrained(args.base_model)
     config = TrainingConfig(
         output_dir=str(args.output),
         num_epochs=args.epochs,
@@ -178,10 +194,11 @@ def main() -> None:
                                           eval_data=to_examples(val))
 
     meta = {
-        "base_model": BASE_MODEL,
-        "train_csv": str(args.train),
+        "base_model": args.base_model,
+        "train_csv": [str(p) for p in args.train],
         "rows": {"train": len(train), "val": len(val)},
         "category_counts": df["category"].value_counts().to_dict(),
+        "lang_counts": df["lang"].value_counts().to_dict(),
         "args": {k: str(v) for k, v in vars(args).items()},
     }
     (args.output / "train_meta.json").write_text(json.dumps(meta, indent=2))

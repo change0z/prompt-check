@@ -11,6 +11,7 @@ Licences verified 2026-09-20 from Hugging Face card metadata
 | Lakera/gandalf_ignore_instructions | injection | MIT | Yes | Attacks against the Gandalf game |
 | jackhhao/jailbreak-classification | jailbreak + benign | Apache-2.0 | Yes | Mostly DAN-style prompts |
 | nvidia/Aegis-AI-Content-Safety-Dataset-2.0 | harmful + benign, with harm subcategories | CC-BY-4.0 | Yes, with attribution | Human-labelled. Prompts derived from Anthropic HH-RLHF. NVIDIA states PII was removed but some may remain. "REDACTED" rows (Suicide Detection samples) excluded by our loader. |
+| dmilush/shieldlm-prompt-injection | multilingual prompt_injection (fr, es, de, pt) for the multilingual adapter, train split for training and test split for eval | MIT | Yes | Only the non-English direct injections are used; they originate in yanismiraoui/prompt_injections (Apache-2.0). Generic attacks, so labelled module none, intent off_topic, random role. Built by poc/build_multilingual.py |
 
 ## Datasets rejected
 
@@ -22,12 +23,31 @@ Licences verified 2026-09-20 from Hugging Face card metadata
 | xTRam1/safe-guard-prompt-injection | No licence declared |
 | allenai/wildjailbreak | Gated access |
 
+## Machine translation
+
+poc/build_multilingual.py translates only benign and data_snooping rows of our own synthetic
+sets (data/erp_train.csv into data/erp_train_multi.csv, eval/erp_eval.csv into
+eval/erp_eval_multi.csv). Train and eval are translated separately, so they never mix.
+
+| Model | Licence | Language |
+|---|---|---|
+| Helsinki-NLP/opus-mt-en-fr | Apache-2.0 | French |
+| Helsinki-NLP/opus-mt-en-es | Apache-2.0 | Spanish |
+| Helsinki-NLP/opus-mt-en-de | CC-BY-4.0 | German |
+| Helsinki-NLP/opus-mt-tc-big-en-pt | CC-BY-4.0 | Portuguese (European and Brazilian) |
+
+Translated text reads more formally than real users type, and jailbreak, secret_seeking and
+system_prompt_extraction have no non-English rows, so multilingual results for those
+categories are not measured.
+
 ## Models
 
 | Model | Licence | Notes |
 |---|---|---|
 | protectai/deberta-v3-base-prompt-injection-v2 | Apache-2.0 | Card states it does NOT detect jailbreak attacks and is English-only; also not recommended for scanning system prompts (false positives) |
 | MoritzLaurer/deberta-v3-base-zeroshot-v2.0 | MIT | Zero-shot NLI classifier |
+| fastino/GLiNER2.5-Decide | Apache-2.0 | English base for the ERP adapter |
+| fastino/GLiNER2.5-multi-Decide | Apache-2.0 | Multilingual base (287M) for the multilingual ERP adapter |
 
 ## Notes
 

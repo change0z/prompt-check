@@ -1,5 +1,5 @@
 """
-"Break the ERP assistant" demo: colleagues get a random ERP role, submit a prompt, and the
+promptcheck demo: visitors get a random ERP role, submit a prompt, and the
 base GLiNER model and the fine-tuned adapter classify it side by side. The player then
 votes on whether the prompt should have been blocked. Every submission and vote is stored
 so it can be labelled and added to the training set later.
@@ -100,7 +100,7 @@ async def lifespan(_: FastAPI):
     yield
 
 
-app = FastAPI(title="Break the ERP assistant", lifespan=lifespan)
+app = FastAPI(title="promptcheck", lifespan=lifespan)
 STATIC = Path(__file__).parent / "static"
 # Fonts are self-hosted so visitors' browsers make no third-party requests.
 app.mount("/static", StaticFiles(directory=STATIC), name="static")

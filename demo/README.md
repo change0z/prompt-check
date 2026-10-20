@@ -1,6 +1,7 @@
-# Break the ERP Assistant demo
+# promptcheck demo
 
-A one-page web app where colleagues write prompts that try to get past the classifier.
+A public one-page web app where visitors write prompts for an ERP assistant and see how
+the classifier that guards it judges them.
 Each round assigns a random ERP role, which the models see, because data snooping
 depends on who is asking. The base GLiNER2.5-Decide model and the fine-tuned adapter in
 `models/gliner-erp/best` judge the prompt side by side. The player then votes on whether

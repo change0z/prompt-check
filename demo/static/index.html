@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
 <title>promptcheck: a gatekeeper for ERP assistants</title>
-<meta name="description" content="A 340M-parameter classifier that screens every prompt before it reaches an AI assistant inside an ERP system. Write a prompt and see how the base and fine-tuned models judge it.">
+<meta name="description" content="When you put an AI assistant inside an ERP, some prompts should never reach it, and nobody can see what people ask. A small classifier that tags every prompt solves both. Try it in five languages.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="promptcheck: a gatekeeper for ERP assistants">
-<meta property="og:description" content="Write a prompt for an ERP assistant and watch a small classifier decide whether it is safe, then tell us who got it right.">
+<meta property="og:description" content="Two problems every ERP assistant runs into, and one small classifier that tags every prompt to solve both. Try four models side by side.">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/static/favicon-32.png" sizes="32x32" type="image/png">
@@ -84,7 +84,8 @@
   .hero h1 { font: 400 clamp(44px, 6.4vw, 92px)/1.02 var(--serif); letter-spacing: -0.015em; margin: 0; min-height: 2.04em; }
   .cursor { display: inline-block; width: 0.45em; height: 0.8em; margin-left: 4px; background: currentColor; vertical-align: -0.06em; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
-  .hero .lede { max-width: 48ch; margin: 26px 0 0; font-size: 16px; }
+  .hero .lede { max-width: 52ch; margin: 22px 0 0; font-size: 16px; }
+  .hero .lede + .lede { margin-top: 14px; }
   .cta { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 32px; }
   .cta a { font: 24px/1 var(--pixel); text-decoration: none; padding: 9px 18px 8px; border: 2px solid var(--ink); box-shadow: var(--shadow); background: var(--ink); color: var(--paper); }
   .cta a.alt { background: var(--paper); color: var(--ink); }
@@ -96,7 +97,8 @@
   .term-wrap .perch { position: absolute; top: 0; right: 28px; display: flex; align-items: flex-end; gap: 14px; }
   .term-wrap .perch .bubble { margin-bottom: 18px; max-width: 280px; }
   .term .win-body { background: var(--ink); color: var(--paper); height: 340px; padding: 14px 16px; display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; font: 21px/1.25 var(--pixel); }
-  .term .win-body > div { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.25em; }
+  /* flex: none so wrapped lines keep their height and old lines scroll off the top */
+  .term .win-body > div { flex: none; white-space: pre-wrap; overflow-wrap: anywhere; min-height: 1.25em; }
   .term .t-dim { opacity: 0.6; }
   .term .v { display: inline-block; padding: 0 6px; margin-right: 8px; }
   .term .v-no { background: var(--paper); color: var(--ink); }
@@ -200,11 +202,20 @@
   .access td.r { text-align: right; padding-right: 8px; white-space: nowrap; color: var(--muted); }
   .access tr.me td.r { color: var(--ink); }
   .access tr.me td.r::before { content: "▶ "; }
-  .access td.c { width: 20px; height: 20px; border: 1px solid var(--ink); background: var(--checker); background-color: var(--paper); opacity: 0.25; }
-  .access td.c.y { background: var(--ink); opacity: 0.55; }
-  .access tr.me td.c { opacity: 0.5; }
-  .access tr.me td.c.y { opacity: 1; }
-  .access .key { margin-top: 8px; color: var(--muted); }
+  /* Heatmap shades in two colours: four dither densities, from sparse dots to solid ink */
+  .access th { cursor: help; }
+  .access td.c { width: 22px; height: 22px; border: 1px solid var(--faint); }
+  .access td.c.l1, .access td.c.l2, .access td.c.l3, .access td.c.l4 { border-color: var(--ink); }
+  .access .l1 { background: var(--dots); }
+  .access .l2 { background: repeating-linear-gradient(45deg, var(--ink) 0 1px, transparent 1px 4px); }
+  .access .l3 { background: var(--checker); }
+  .access .l4 { background: var(--ink); }
+  .access tr.me td.r { font-weight: 400; }
+  .access td.c.last { outline: 2px solid var(--ink); outline-offset: 2px; animation: hit 0.6s steps(1); }
+  @keyframes hit { 0%, 50% { outline-color: transparent; } 25%, 75% { outline-color: var(--ink); } }
+  .access .key { margin-top: 10px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+  .access .key i { display: inline-block; width: 12px; height: 12px; border: 1px solid var(--ink); }
+  .access .total { margin-top: 4px; color: var(--muted); }
 
   .duel { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; align-items: start; }
   .model .win-body { min-height: 250px; font: 20px/1.25 var(--pixel); }
@@ -335,7 +346,9 @@
     .term .win-body { height: 290px; font-size: 19px; }
     .pick { position: static; }
     .menu { left: 0; right: 0; min-width: 0; }
-    .term-wrap .perch { right: 8px; }
+    .term-wrap { padding-top: 104px; }
+    .term-wrap .perch { right: 8px; left: 0; justify-content: flex-end; }
+    .term-wrap .perch .bubble { font-size: 18px; margin-bottom: 12px; }
     .side { grid-template-columns: minmax(0, 1fr); }
     .guide .bubble { flex: 1; min-width: 0; }
     .access { width: 100%; }
@@ -370,12 +383,17 @@
 
 <header class="hero" id="top">
   <div>
-    <p class="eyebrow">A guardrail for ERP assistants</p>
+    <p class="eyebrow">Guardrails + analytics for ERP assistants</p>
     <h1><span id="typed"></span><span class="cursor"></span></h1>
     <p class="lede">
-      We are building an AI assistant into an ERP product. Before it sees a question, a small
-      model decides whether to let it through. Write a prompt, see what it decides, and tell us
-      if it got it right.
+      Put an AI assistant inside an ERP and two problems show up fast. Some prompts should never
+      reach it: injections, jailbreaks, grabs for credentials, or data outside the user's role.
+      And once it is live, nobody can see what people actually ask it.
+    </p>
+    <p class="lede">
+      One small classifier can handle both. It tags every prompt with a verdict, an ERP area and
+      an intent in milliseconds: before the assistant sees it, to stop what shouldn't get
+      through, and after the session, to show what is being used and what is being tried.
     </p>
     <div class="cta"><a href="#try">Try a prompt</a><a class="alt" href="#how">How it works</a></div>
   </div>
@@ -396,7 +414,7 @@
 <section class="section" id="how">
   <div class="heading">$ <b>man gatekeeper</b></div>
   <h2 class="rise reveal">How it works</h2>
-  <p class="intro">One small model, one pass, every message. It returns labels, never text, so it can't be talked into saying anything.</p>
+  <p class="intro">One small model, one pass, every message. It returns labels, never text, so it can't be talked into saying anything. The same labels, stored per prompt, become the analytics: the heatmap in the playground below is that view.</p>
   <div class="pipeline" id="pl" data-step="1">
     <div class="win pl-in reveal">
       <div class="win-title"><span>incoming prompt</span></div>
@@ -447,8 +465,12 @@
             <div class="bubble left" id="pg-say"></div>
           </div>
           <div class="win access">
-            <div class="win-title"><span>who sees what</span></div>
-            <div class="win-body"><table id="access"></table><div class="key">■ can see &nbsp; ▶ you</div></div>
+            <div class="win-title"><span>what people try</span></div>
+            <div class="win-body">
+              <table id="access"></table>
+              <div class="key" aria-hidden="true">few <i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> many &nbsp;· ▶ you</div>
+              <div class="total" id="grid-total"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -566,7 +588,7 @@
 <div class="win tip" id="tip" role="tooltip"><div class="win-title"><span id="tip-title"></span></div><div class="win-body" id="tip-body"></div></div>
 
 <script>
-// What each role may see, as [ERP area, mascot hint]. Rows and columns of the access map follow this order.
+// What each role may see, as [ERP area, mascot hint]. The heatmap rows follow this order.
 const ROLE_INFO = {
   hr_admin: ["hr", "HR data is yours. Passwords are not."],
   finance_clerk: ["finance", "Invoices, yes. What about an instruction hidden in a pasted email?"],
@@ -575,7 +597,9 @@ const ROLE_INFO = {
   warehouse_operator: ["inventory", "Stock is your thing. Ask for salaries and see what I do."],
   system_admin: ["admin", "You manage users. The database password is still a no."],
 };
-const AREA_SHORT = { hr: "hr", finance: "fin", sales: "sal", purchasing: "pur", inventory: "inv", admin: "adm" };
+// Heatmap columns: every verdict category, in training order.
+const CAT_SHORT = { benign: "ok", prompt_injection: "inj", jailbreak: "jb", secret_seeking: "key",
+  system_prompt_extraction: "sys", data_snooping: "snp" };
 
 // The label index, matching the taxonomy the models were trained on: [label, meaning, example].
 const LABELS = {
@@ -686,11 +710,30 @@ function buildIndex() {
   }
 }
 
+// ---- Heatmap: how many prompts each role sent, by the verdict they got ----
 function buildAccess() {
-  const areas = Object.values(ROLE_INFO).map(r => r[0]);
-  $("access").innerHTML = `<tr><th></th>${areas.map(a => `<th>${AREA_SHORT[a]}</th>`).join("")}</tr>` +
-    Object.entries(ROLE_INFO).map(([r, [area]]) =>
-      `<tr data-role="${r}"><td class="r">${r}</td>${areas.map(a => `<td class="c${a === area ? " y" : ""}"></td>`).join("")}</tr>`).join("");
+  const cats = Object.keys(CAT_SHORT);
+  $("access").innerHTML = `<tr><th></th>${cats.map(c => `<th title="${c}">${CAT_SHORT[c]}</th>`).join("")}</tr>` +
+    Object.keys(ROLE_INFO).map(r =>
+      `<tr data-role="${r}"><td class="r">${r}</td>${cats.map(c => `<td class="c" data-cat="${c}"></td>`).join("")}</tr>`).join("");
+}
+function paintGrid(grid) {
+  const counts = {};
+  for (const [r, c, n] of grid) counts[r + ":" + c] = n;
+  const max = Math.max(1, ...Object.values(counts));
+  for (const td of document.querySelectorAll("#access td.c")) {
+    const r = td.parentElement.dataset.role, n = counts[r + ":" + td.dataset.cat] || 0;
+    td.className = td.className.replace(/\bl[1-4]\b/g, "").trim();
+    if (n) td.classList.add("l" + Math.ceil(4 * n / max));
+    td.title = `${r} · ${td.dataset.cat}: ${plural(n, "prompt")}`;
+  }
+  const total = grid.reduce((a, g) => a + g[2], 0);
+  $("grid-total").textContent = `${plural(total, "prompt")}, as judged by the multilingual fine-tuned model`;
+}
+function markLast(r, cat) {
+  document.querySelectorAll("#access td.last").forEach(td => td.classList.remove("last"));
+  const td = document.querySelector(`#access tr[data-role="${r}"] td[data-cat="${cat}"]`);
+  if (td) { void td.offsetWidth; td.classList.add("last"); }
 }
 
 // ---- Tooltip: a little window with an arrow pointing at the hovered label ----
@@ -806,6 +849,7 @@ function showStats(s) {
   paintRates();
   $("s-total").textContent = `${plural(s.total, "prompt")} · ${voted} voted`;
   $("clock-count").textContent = `${plural(s.total, "prompt")}`;
+  if (s.grid) paintGrid(s.grid);
   const bar = (cls, v, of) => {
     const on = of ? Math.round(20 * v / of) : 0;
     return `<span class="bar ${cls}">${Array.from({length: 20}, (_, i) => `<i class="${i < on ? "on" : ""}" style="--i:${i}"></i>`).join("")}</span>`;
@@ -852,6 +896,7 @@ async function submit() {
     $("outcome").textContent = "";
     $("vote").hidden = false;
     showStats(data.stats);
+    markLast(role, data[HOOT].category);
   } catch (err) {
     renderAll(last ? "done" : "empty");
     setFace($("pg-bot"), "neutral"); say($("pg-say"), "Something went wrong. Try again?");
@@ -894,7 +939,7 @@ $("form").addEventListener("submit", e => { e.preventDefault(); submit(); });
 const menu = $("role-menu"), roleBtn = $("role-btn");
 function buildMenu() {
   menu.innerHTML = roles.map(r =>
-    `<div class="item" role="option" tabindex="-1" data-role="${r}"><span class="tick"></span>${r}<small>${(ROLE_INFO[r] || [""])[0]}</small></div>`).join("") +
+    `<div class="item" role="option" tabindex="-1" data-role="${r}"><span class="tick"></span>${r}<small>sees ${(ROLE_INFO[r] || [""])[0]}</small></div>`).join("") +
     `<div class="sep" role="separator"></div><div class="item" role="option" tabindex="-1" data-role="*"><span class="tick">↻</span>random role</div>`;
 }
 function openMenu() {

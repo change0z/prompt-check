@@ -220,7 +220,11 @@ def stats():
     with db() as conn:
         r = conn.execute(f"""SELECT COUNT(*) AS total, SUM(vote = 'block') AS should_block,
             SUM(vote = 'allow') AS fine, {per} FROM submissions""").fetchone()
-    return {k: r[k] or 0 for k in r.keys()}
+        # Role by verdict counts for the heatmap. Hoot speaks for the multilingual adapter;
+        # rows from before it existed fall back to the English adapter's verdict.
+        grid = conn.execute("""SELECT role, COALESCE(mft_category, ft_category) AS category,
+            COUNT(*) AS n FROM submissions GROUP BY 1, 2""").fetchall()
+    return {k: r[k] or 0 for k in r.keys()} | {"grid": [list(g) for g in grid]}
 
 
 @app.get("/admin/export.csv")

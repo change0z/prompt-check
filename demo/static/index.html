@@ -243,13 +243,29 @@
   .loadbar i { width: 10px; height: 16px; border: 1px solid var(--ink); animation: load 1s steps(1) infinite; }
   @keyframes load { 0% { background: var(--ink); } 30% { background: transparent; } }
 
-  .dialog { max-width: 540px; justify-self: center; width: 100%; }
+  /* Vote prompt: a terminal question with two options. Hovering sweeps the fill across in
+     pixel steps and shows a blinking marker; the chosen option blinks, then keeps a tick. */
+  .dialog { max-width: 640px; justify-self: center; width: 100%; }
   .dialog[hidden] { display: none; }
-  .dialog .win-body { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: start; padding: 18px; }
-  .dialog .icon { font: 46px/1 var(--pixel); width: 44px; height: 44px; display: grid; place-items: center; border: 2px solid var(--ink); border-radius: 50%; }
-  .dialog p { margin: 0 0 14px; font: 21px/1.2 var(--serif); }
-  .dialog .buttons { display: flex; gap: 14px; justify-content: flex-end; grid-column: 2; }
-  .outcome { grid-column: 1 / -1; margin-top: 10px; font: 19px/1.25 var(--pixel); min-height: 1.2em; }
+  .dialog.opening { animation: zoom-open 0.42s steps(6) both; }
+  .dialog .win-body { padding: 16px 18px; font: 21px/1.3 var(--pixel); }
+  .choices { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 16px; }
+  .choice { position: relative; isolation: isolate; overflow: hidden; font: 21px/1 var(--pixel); color: var(--ink); background: transparent; border: 1px solid var(--ink); padding: 7px 16px 7px 30px; cursor: pointer; transition: color 0s 0.1s; }
+  .choice::before { content: "▶"; position: absolute; left: 10px; opacity: 0; }
+  .choice::after { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--ink); transform: scaleX(0); transform-origin: left; transition: transform 0.2s steps(5); }
+  .choice:hover, .choice:focus-visible, .choice.chosen { color: var(--paper); }
+  .choice:hover::after, .choice:focus-visible::after, .choice.chosen::after { transform: scaleX(1); }
+  .choice:hover::before, .choice:focus-visible::before { opacity: 1; animation: blink 1s steps(1) infinite; }
+  .choice.chosen::before { content: "✓"; opacity: 1; animation: none; }
+  .choice:focus-visible { outline: none; }
+  .choice:active { transform: translate(1px, 1px); }
+  .choice kbd { transition: inherit; }
+  .choice:hover kbd, .choice:focus-visible kbd, .choice.chosen kbd { color: var(--paper); border-color: var(--paper); }
+  .choice.blink::after { animation: fill-blink 0.3s steps(1); }
+  @keyframes fill-blink { 0%, 50% { opacity: 0; } 25%, 75% { opacity: 1; } }
+  .outcome { margin-top: 14px; min-height: 1.2em; }
+  .outcome .o-line { display: grid; grid-template-columns: 220px 90px 1fr; gap: 10px; }
+  .outcome .o-sum { margin-top: 6px; }
 
   /* Tooltip: a tiny window with an arrow, positioned by script */
   .tip { position: fixed; z-index: 90; width: max-content; max-width: 290px; pointer-events: none; opacity: 0; transform: translateY(6px); transition: opacity 0.15s, transform 0.15s; }
@@ -362,9 +378,8 @@
     .chart .line .bar { grid-column: 1 / -1; grid-row: 2; }
     .arena { padding-top: 48px; }
     .decision { font-size: 42px; }
-    .dialog .win-body { grid-template-columns: 1fr; }
-    .dialog .icon { display: none; }
-    .dialog .buttons { grid-column: auto; justify-content: center; }
+    .choice { flex: 1 1 100%; }
+    .outcome .o-line { grid-template-columns: 1fr auto auto; font-size: 18px; }
     .idx td:first-child { white-space: normal; width: 40%; }
     .idx td { padding: 8px 10px; overflow-wrap: anywhere; }
     .idx caption small { display: block; margin: 2px 0 0; }
@@ -483,15 +498,15 @@
       </div>
 
       <div class="win dialog" id="vote" hidden>
-        <div class="win-title"><span>Your call</span></div>
+        <div class="win-title"><span>promptcheck: your call</span></div>
         <div class="win-body inverse">
-          <div class="icon" aria-hidden="true">?</div>
-          <div><p>Should this prompt have been blocked?</p></div>
-          <div class="buttons">
-            <button type="button" class="btn" data-vote="allow">No <kbd>N</kbd></button>
-            <button type="button" class="btn" data-vote="block">Yes <kbd>Y</kbd></button>
+          <div><span class="t-dim">$</span> promptcheck --review</div>
+          <div>? should this prompt have been blocked? <span class="t-dim">[y/n]</span> <span class="cursor"></span></div>
+          <div class="choices" role="group" aria-label="Your vote">
+            <button type="button" class="choice" data-vote="block"><kbd>Y</kbd> yes, block it</button>
+            <button type="button" class="choice" data-vote="allow"><kbd>N</kbd> no, it's fine</button>
           </div>
-          <div class="outcome" id="outcome"></div>
+          <div class="outcome" id="outcome" aria-live="polite"></div>
         </div>
       </div>
     </div>
@@ -894,7 +909,10 @@ async function submit() {
     say($("pg-say"), cat === "benign" ? "Looks fine to me. Do you agree?" : `I'd block that: ${cat}. Do you agree?`);
     document.querySelectorAll("#vote [data-vote]").forEach(b => b.classList.remove("chosen"));
     $("outcome").textContent = "";
-    $("vote").hidden = false;
+    if ($("vote").hidden) {
+      $("vote").hidden = false;
+      $("vote").classList.remove("opening"); void $("vote").offsetWidth; $("vote").classList.add("opening");
+    }
     showStats(data.stats);
     markLast(role, data[HOOT].category);
   } catch (err) {
@@ -907,8 +925,24 @@ async function submit() {
   }
 }
 
+// The outcome prints like terminal output: your vote, each model's verdict, then a summary.
+function showOutcome(vote) {
+  const shouldBlock = vote === "block";
+  const lines = [`<div><span class="t-dim">&gt;</span> you said: ${shouldBlock ? "BLOCK" : "ALLOW"}</div>`,
+    ...MODELS.map(id => {
+      const blocked = last[id].category !== "benign";
+      return `<div class="o-line"><span>${NAME[id]}</span><span>${blocked ? "BLOCKED" : "ALLOWED"}</span><span>${blocked === shouldBlock ? "✓ agrees" : "✗ disagrees"}</span></div>`;
+    }),
+    `<div class="o-sum">${outcome(vote)}</div>`,
+    `<div class="t-dim"># you can change your vote</div>`];
+  $("outcome").innerHTML = lines.join("");
+  [...$("outcome").children].forEach((el, i) => { el.classList.add("print"); el.style.animationDelay = `${i * 70}ms`; });
+}
+
 async function castVote(vote) {
   if (!last) return;
+  const btn = document.querySelector(`#vote [data-vote="${vote}"]`);
+  if (!reduced) { btn.classList.remove("blink"); void btn.offsetWidth; btn.classList.add("blink"); }
   try {
     const res = await fetch("/api/vote", {
       method: "POST", headers: {"Content-Type": "application/json"},
@@ -922,7 +956,7 @@ async function castVote(vote) {
     const agreed = (last[HOOT].category !== "benign") === (vote === "block");
     setFace($("pg-bot"), agreed ? "happy" : "think");
     say($("pg-say"), agreed ? "We agree. Try another?" : "Noted. That's how I learn.");
-    $("outcome").textContent = outcome(vote) + " You can change your vote.";
+    showOutcome(vote);
     showStats(data.stats);
   } catch (err) {
     $("outcome").textContent = "Error: " + err.message;

@@ -184,6 +184,21 @@ def index():
     return FileResponse(STATIC / "index.html")
 
 
+# The other pages of the site, each a static file sharing static/site.css and site.js.
+PAGES = ["playground", "results", "whats-new", "about"]
+
+
+def page_route(name: str):
+    # No parameters, so nothing in the request can choose the file.
+    def page():
+        return FileResponse(STATIC / f"{name}.html")
+    return page
+
+
+for _page in PAGES:
+    app.add_api_route(f"/{_page}", page_route(_page), methods=["GET"], include_in_schema=False)
+
+
 @app.get("/health")
 def health():
     return {"ok": MULTI_BASE_MODEL in state, "dtype": state.get("dtype")}

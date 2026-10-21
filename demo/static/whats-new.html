@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>What's new · promptcheck</title>
+<meta name="description" content="Model and infrastructure updates to promptcheck, newest first.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="What's new · promptcheck">
+<meta property="og:description" content="Model and infrastructure updates to promptcheck, newest first.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/site.css">
+<script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+<nav class="menubar" aria-label="Main">
+  <a class="brand" href="/"><span>promptcheck</span></a>
+  <div class="links"><a href="/playground">Playground</a><a href="/results">Results</a><a href="/whats-new">What's new</a><a href="/about">About</a></div>
+  <span class="status" aria-hidden="true"><span id="clock-count"></span> · <span id="clock-time"></span></span>
+</nav>
+
+<header class="page-head">
+  <div class="heading">$ <b>cat changelog</b></div>
+  <h1>What's new</h1>
+  <p class="intro">Model and infrastructure updates, newest first.</p>
+</header>
+
+<section class="section">
+  <div class="dash">
+    <div class="win reveal">
+      <div class="win-title"><span>progress</span></div>
+      <div class="win-body inverse">
+        <div><span class="t-dim">$</span> promptcheck eval --set real --every-release</div>
+        <div class="viz" id="progress" style="margin-top: 14px"></div>
+        <div class="db-key"><span><i class="g-key"></i>English</span><span><i class="g-key old"></i>multilingual</span><span class="axis">right category on real prompts</span></div>
+        <p class="caption dim">Every release scored on today's real-prompt test set and seven labels, so earlier versions also lose the harmful prompts they had no label for.</p>
+      </div>
+    </div>
+    <div class="win reveal">
+      <div class="win-title"><span>serving</span></div>
+      <div class="win-body inverse">
+        <div><span class="t-dim">$</span> promptcheck serve --dtype bfloat16</div>
+        <div class="viz" id="serving" style="margin-top: 14px"></div>
+      </div>
+    </div>
+  </div>
+  <div id="log"></div>
+</section>
+
+<footer>
+  <span>◆ promptcheck · a proof of concept by Ziyad Shaikh, 2026</span>
+  <nav aria-label="Footer"><a href="/playground">Playground</a><a href="/results">Results</a><a href="/whats-new">What's new</a><a href="/about">About</a></nav>
+</footer>
+
+<script src="/static/site.js"></script>
+<script>
+// Category accuracy on data/erp_eval_real.csv, seven labels, from the evaluation runs of 21 Oct.
+$("progress").innerHTML = chartHTML({type: "progress", min: 30, max: 80, ticks: [30, 40, 50, 60, 70, 80],
+  W: $("progress").clientWidth < 480 ? 360 : 560,
+  cols: [{key: "base", label: "base", sub: "as released"}, {key: "oct18", label: "18 Oct", sub: "English adapter"},
+         {key: "oct20", label: "20 Oct", sub: "multilingual"}, {key: "oct21", label: "21 Oct", sub: "+ harmful"}],
+  series: [{name: "English", style: "solid", points: {base: 60, oct18: 59, oct21: 72}},
+           {name: "multilingual", style: "dotted", below: true, points: {base: 36, oct20: 53, oct21: 62}}]});
+watch([$("progress")]);
+fetch("/static/changelog.json").then(r => r.json()).then(items => {
+  // The serving gauges come from the latest infra entry; the log lists every release.
+  const infra = items.find(e => e.tag === "infra" && e.chart);
+  if (infra) { $("serving").innerHTML = chartHTML(infra.chart); watch([$("serving")]); }
+  $("log").innerHTML = logHTML(items);
+  watch($("log").querySelectorAll(".log"), el => el.classList.add("in"));
+});
+</script>
+</body>
+</html>

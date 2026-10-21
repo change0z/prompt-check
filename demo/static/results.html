@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Results · promptcheck</title>
+<meta name="description" content="How four prompt classifiers for an ERP assistant compare on four held-out test sets, including real prompts from the live demo, and what the numbers taught us.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Results · promptcheck">
+<meta property="og:description" content="Four classifiers, four held-out test sets, five languages: what a small fine-tuned model can and cannot catch.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/site.css">
+<script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+<nav class="menubar" aria-label="Main">
+  <a class="brand" href="/"><span>promptcheck</span></a>
+  <div class="links"><a href="/playground">Playground</a><a href="/results">Results</a><a href="/whats-new">What's new</a><a href="/about">About</a></div>
+  <span class="status" aria-hidden="true"><span id="clock-count"></span> · <span id="clock-time"></span></span>
+</nav>
+
+<header class="page-head">
+  <div class="heading">$ <b>cat results.md</b></div>
+  <h1>Results</h1>
+  <p class="intro">Four classifiers, four test sets the models never trained on. A prompt counts as caught when a model labels it anything but benign. Live scores from visitors' votes are in the <a href="/playground#score">playground</a>.</p>
+</header>
+
+<section class="section" id="sets-section">
+  <div class="heading">$ <b>ls eval/</b></div>
+  <h2 class="rise reveal">Test sets</h2>
+  <div class="stats" id="sets"></div>
+</section>
+
+<section class="section" id="compare-section">
+  <div class="heading">$ <b>promptcheck compare</b></div>
+  <h2 class="rise reveal">Model by model</h2>
+  <div class="legend" aria-hidden="true">
+    <span><i class="f-base"></i>English base</span><span><i class="f-ft"></i>English fine-tuned</span>
+    <span><i class="f-mbase"></i>multilingual base</span><span><i class="f-mft"></i>multilingual fine-tuned</span>
+  </div>
+  <div class="win reveal" style="max-width: 920px">
+    <div class="win-title"><span>promptcheck: compare</span></div>
+    <div class="win-body inverse">
+      <div><span class="t-dim">$</span> promptcheck compare --set <span id="setname"></span> <span class="t-dim"># pick a test set</span></div>
+      <div class="tabs" id="tabs" role="group" aria-label="Test set"></div>
+      <div class="viz" id="compare" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="lessons">
+  <div class="heading">$ <b>grep -i lesson notes.md</b></div>
+  <h2 class="rise reveal">What we learned</h2>
+  <div class="notes" id="notes"></div>
+</section>
+
+<section class="section" id="method">
+  <div class="heading">$ <b>cat train.log</b></div>
+  <h2 class="rise reveal">Method</h2>
+  <div class="win reveal" style="max-width: 920px">
+    <div class="win-title"><span>train.log</span></div>
+    <div class="win-body inverse"><div class="typed-log" id="log"></div></div>
+  </div>
+</section>
+
+<footer>
+  <span>◆ promptcheck · a proof of concept by Ziyad Shaikh, 2026</span>
+  <nav aria-label="Footer"><a href="/playground">Playground</a><a href="/results">Results</a><a href="/whats-new">What's new</a><a href="/about">About</a></nav>
+</footer>
+
+<script src="/static/site.js"></script>
+<script src="/static/results.js"></script>
+</body>
+</html>

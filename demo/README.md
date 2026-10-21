@@ -1,7 +1,7 @@
 # promptcheck demo
 
-A public one-page web app where visitors write prompts for an ERP assistant and see how
-the classifier that guards it judges them.
+A public project site (home, playground, results, what's new, about) where visitors write
+prompts for an ERP assistant and see how the classifier that guards it judges them.
 The player picks an ERP role (or takes a random one), which the models see, because data
 snooping depends on who is asking. Four models judge the prompt side by side: the English
 GLiNER2.5-Decide and the multilingual GLiNER2.5-multi-Decide, each with and without our

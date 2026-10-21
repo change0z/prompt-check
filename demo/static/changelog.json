@@ -1,0 +1,62 @@
+[
+  {
+    "date": "2026-10-21",
+    "tag": "infra",
+    "title": "Half the memory, twice the speed",
+    "summary": "The models now run in bfloat16 instead of float32.",
+    "points": [
+      "Same verdicts as before on 99.9 and 100 percent of 1,397 test prompts.",
+      "8-bit integer quantisation was tried first and rejected: it broke both encoders."
+    ],
+    "chart": {
+      "type": "gauges",
+      "items": [
+        [
+          "memory held by the four models",
+          "3.8",
+          "2.3",
+          4,
+          "GB",
+          "▼ 38%"
+        ],
+        [
+          "seconds per prompt, all four",
+          "0.85",
+          "0.39",
+          1,
+          "s",
+          "2.2× faster"
+        ]
+      ]
+    },
+    "commit": "60bf916"
+  },
+  {
+    "date": "2026-10-21",
+    "tag": "model",
+    "title": "A harmful category, and retrained adapters",
+    "summary": "A seventh category, harmful, covers requests no business role justifies, such as discriminatory hiring or weapons. Both adapters were retrained with it.",
+    "points": [
+      "Trained on public harmful prompts in five languages, plus a third as many safe ones so chit-chat is not mistaken for harm.",
+      "Training moved to an AMD Radeon RX 9070 XT through ROCm: about 3 minutes per adapter instead of hours on the CPU."
+    ],
+    "commit": "c0b9502"
+  },
+  {
+    "date": "2026-10-20",
+    "tag": "model",
+    "title": "Multilingual model and a four-way comparison",
+    "summary": "Added GLiNER2.5-multi-Decide with its own adapter, trained on the English set, machine translations into French, Spanish, German and Portuguese, and public injections.",
+    "points": [
+      "The demo now compares four models: English and multilingual, each with and without fine-tuning."
+    ],
+    "commit": "a1f81bc"
+  },
+  {
+    "date": "2026-10-18",
+    "tag": "model",
+    "title": "A fine-tuned ERP adapter",
+    "summary": "A 30 MB LoRA adapter on GLiNER2.5-Decide, trained on about 500 synthetic ERP prompts with each user's role in the input.",
+    "commit": "58284a8"
+  }
+]

@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Playground · promptcheck</title>
+<meta name="description" content="Pick an ERP role, write a prompt in any of five languages and watch four classifiers judge it, then vote on who got it right.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Playground · promptcheck">
+<meta property="og:description" content="Two problems every ERP assistant runs into, and one small classifier that tags every prompt to solve both. Try four models side by side.">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/static/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/site.css">
+<script>document.documentElement.classList.add("js");</script>
+</head>
+<body>
+<nav class="menubar" aria-label="Main">
+  <a class="brand" href="/"><span>promptcheck</span></a>
+  <div class="links"><a href="/playground">Playground</a><a href="/results">Results</a><a href="/whats-new">What's new</a><a href="/about">About</a></div>
+  <span class="status" aria-hidden="true"><span id="clock-count"></span> · <span id="clock-time"></span></span>
+</nav>
+
+<header class="page-head">
+  <div class="heading">$ <b>./playground</b></div>
+  <h1>Playground</h1>
+  <p class="intro">Pick a role, then ask the ERP assistant anything, in English, French, Spanish, German or Portuguese. Four classifiers judge the prompt side by side: an English and a multilingual model, each with and without our fine-tuning. Then tell us who got it right.</p>
+</header>
+
+<section class="arena-wrap flush" id="try">
+  <div class="arena">
+    <div class="os-tag">Playground</div>
+
+    <div class="stage">
+      <div class="top">
+        <form class="win composer" id="form">
+          <div class="win-title"><span>promptcheck: your session</span></div>
+          <div class="win-body inverse">
+            <div class="who">
+              <div class="cmd"><span class="t-dim">$</span> promptcheck --role <span class="pick"><button type="button" class="role-btn" id="role-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="role-menu"><span id="role-name"></span> ▾</button><div class="menu" id="role-menu" role="listbox" aria-label="Choose a role" hidden></div></span> <span class="t-dim"># pick a role</span></div>
+            </div>
+            <label for="text" style="position:absolute;left:-9999px">Your prompt</label>
+            <div class="term-input"><div class="mirror" id="mirror" aria-hidden="true"></div><span class="caret" id="caret" aria-hidden="true"></span><textarea id="text" required placeholder="ask the ERP assistant anything, in English, French, Spanish, German or Portuguese. something routine, or something it should refuse."></textarea></div>
+            <div class="row">
+              <span><kbd>Enter</kbd> submit &nbsp;<kbd>Shift</kbd>+<kbd>Enter</kbd> new line <span id="count"></span></span>
+              <button type="submit" class="btn default" id="go">Check prompt</button>
+            </div>
+            <div class="error" id="error" role="alert"></div>
+          </div>
+        </form>
+
+        <div class="side">
+          <div class="guide" aria-live="polite">
+            <div class="bot" id="pg-bot" data-auto aria-hidden="true"></div>
+            <div class="bubble left" id="pg-say"></div>
+          </div>
+          <div class="win access">
+            <div class="win-title"><span>what people try</span></div>
+            <div class="win-body">
+              <table id="access"></table>
+              <div class="key" aria-hidden="true">few <i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> many &nbsp;· ▶ you</div>
+              <div class="total" id="grid-total"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="duel" aria-live="polite">
+        <div class="win model" id="base"><div class="win-title"><span>English · base</span></div><div class="win-body inverse"></div></div>
+        <div class="win model" id="ft"><div class="win-title"><span>English · fine-tuned</span></div><div class="win-body inverse"></div></div>
+        <div class="win model" id="mbase"><div class="win-title"><span>Multilingual · base</span></div><div class="win-body inverse"></div></div>
+        <div class="win model" id="mft"><div class="win-title"><span>Multilingual · fine-tuned</span></div><div class="win-body inverse"></div></div>
+      </div>
+
+      <div class="win dialog" id="vote" hidden>
+        <div class="win-title"><span>promptcheck: your call</span></div>
+        <div class="win-body inverse">
+          <div><span class="t-dim">$</span> promptcheck --review</div>
+          <div>? should this prompt have been blocked? <span class="t-dim">[y/n]</span> <span class="cursor"></span></div>
+          <div class="choices" role="group" aria-label="Your vote">
+            <button type="button" class="choice" data-vote="block"><kbd>Y</kbd> yes, block it</button>
+            <button type="button" class="choice" data-vote="allow"><kbd>N</kbd> no, it's fine</button>
+          </div>
+          <div class="outcome" id="outcome" aria-live="polite"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="score">
+  <div class="heading">$ <b>cat score.log</b></div>
+  <h2 class="rise reveal">Scoreboard</h2>
+  <div class="rule rise reveal" aria-label="A model scores a point when its verdict matches your vote.">
+    <span class="tok ink">you: BLOCK</span><span class="sep">vs</span>
+    <span class="tok ink">model: BLOCK</span><span class="pt">+1</span><span class="sep">·</span>
+    <span class="tok">model: ALLOW</span><span class="pt">+0</span>
+  </div>
+  <div class="bignums rise reveal" id="nums"></div>
+  <div class="win chart reveal" id="chart-win">
+    <div class="win-title"><span>score.log</span></div>
+    <div class="win-body"><div class="total" id="s-total"></div><div id="chart"></div></div>
+  </div>
+</section>
+
+<section class="section" id="labels">
+  <div class="heading">$ <b>man labels</b></div>
+  <h2 class="rise reveal">Label index</h2>
+  <p class="intro">Every label the models can give. Hover a label in a result to see it explained.</p>
+  <div class="win idx reveal">
+    <div class="win-title"><span>labels.idx</span></div>
+    <div class="win-body">
+      <table><caption>Category <small>Is the prompt safe? Anything except benign is blocked.</small></caption>
+        <thead><tr><th>label</th><th>meaning</th></tr></thead><tbody id="t-category"></tbody></table>
+      <table><caption>ERP area <small>Which part of the ERP the data belongs to.</small></caption>
+        <thead><tr><th>label</th><th>meaning</th></tr></thead><tbody id="t-module"></tbody></table>
+      <table><caption>Intent <small>What the user is trying to do.</small></caption>
+        <thead><tr><th>label</th><th>meaning</th></tr></thead><tbody id="t-intent"></tbody></table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>◆ promptcheck · a proof of concept by Ziyad Shaikh, 2026</span>
+  <nav aria-label="Footer"><a href="/playground">Playground</a><a href="/results">Results</a><a href="/whats-new">What's new</a><a href="/about">About</a></nav>
+</footer>
+
+<div class="win tip" id="tip" role="tooltip"><div class="win-title"><span id="tip-title"></span></div><div class="win-body" id="tip-body"></div></div>
+
+<script src="/static/site.js"></script>
+<script src="/static/playground.js"></script>
+</body>
+</html>

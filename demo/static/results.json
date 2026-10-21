@@ -1,0 +1,146 @@
+{
+ "generated": "2026-10-21",
+ "dtype_note": "float32 reference run; the live site serves bfloat16, which matches 99.9 to 100 percent of fine-tuned verdicts",
+ "sets": [
+  {
+   "key": "erp_en",
+   "name": "English ERP test set",
+   "langs": "en",
+   "source": "Hand-reviewed synthetic ERP prompts, written separately from training data",
+   "attacks": 70,
+   "harmless": 120,
+   "rows": 190,
+   "models": {
+    "base": {
+     "caught": 60,
+     "allowed": 113,
+     "category_acc": 0.895,
+     "area_acc": 0.726
+    },
+    "ft": {
+     "caught": 66,
+     "allowed": 117,
+     "category_acc": 0.958,
+     "area_acc": 0.916
+    },
+    "mbase": {
+     "caught": 59,
+     "allowed": 16,
+     "category_acc": 0.279,
+     "area_acc": 0.684
+    },
+    "mft": {
+     "caught": 62,
+     "allowed": 101,
+     "category_acc": 0.811,
+     "area_acc": 0.884
+    }
+   }
+  },
+  {
+   "key": "erp_multi",
+   "name": "Multilingual ERP test set",
+   "langs": "en \u00b7 fr \u00b7 es \u00b7 de \u00b7 pt",
+   "source": "The English set, plus its harmless and snooping prompts machine-translated, plus public injections",
+   "attacks": 233,
+   "harmless": 600,
+   "rows": 833,
+   "models": {
+    "base": {
+     "caught": 150,
+     "allowed": 567,
+     "category_acc": 0.801,
+     "area_acc": 0.707
+    },
+    "ft": {
+     "caught": 201,
+     "allowed": 574,
+     "category_acc": 0.876,
+     "area_acc": 0.896
+    },
+    "mbase": {
+     "caught": 182,
+     "allowed": 151,
+     "category_acc": 0.259,
+     "area_acc": 0.66
+    },
+    "mft": {
+     "caught": 208,
+     "allowed": 515,
+     "category_acc": 0.856,
+     "area_acc": 0.912
+    }
+   }
+  },
+  {
+   "key": "harmful",
+   "name": "Harmful requests",
+   "langs": "en \u00b7 fr \u00b7 es \u00b7 de \u00b7 pt",
+   "source": "Public safety data (Aegis 2.0 and a translated benchmark), harmful and safe, test splits only",
+   "attacks": 216,
+   "harmless": 100,
+   "rows": 316,
+   "models": {
+    "base": {
+     "caught": 169,
+     "allowed": 61,
+     "category_acc": 0.712,
+     "area_acc": 0.117
+    },
+    "ft": {
+     "caught": 194,
+     "allowed": 51,
+     "category_acc": 0.759,
+     "area_acc": 0.978
+    },
+    "mbase": {
+     "caught": 203,
+     "allowed": 14,
+     "category_acc": 0.076,
+     "area_acc": 0.155
+    },
+    "mft": {
+     "caught": 182,
+     "allowed": 55,
+     "category_acc": 0.747,
+     "area_acc": 0.981
+    }
+   }
+  },
+  {
+   "key": "real",
+   "name": "Real prompts from this demo",
+   "langs": "en \u00b7 fr",
+   "source": "Prompts sent to the live demo, hand-labelled, names removed; never trained on",
+   "attacks": 40,
+   "harmless": 18,
+   "rows": 58,
+   "models": {
+    "base": {
+     "caught": 28,
+     "allowed": 13,
+     "category_acc": 0.603,
+     "area_acc": 0.448
+    },
+    "ft": {
+     "caught": 35,
+     "allowed": 12,
+     "category_acc": 0.724,
+     "area_acc": 0.655
+    },
+    "mbase": {
+     "caught": 36,
+     "allowed": 2,
+     "category_acc": 0.362,
+     "area_acc": 0.466
+    },
+    "mft": {
+     "caught": 34,
+     "allowed": 11,
+     "category_acc": 0.621,
+     "area_acc": 0.638
+    }
+   }
+  }
+ ]
+}

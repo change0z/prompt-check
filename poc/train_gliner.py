@@ -25,7 +25,15 @@ Usage:
     uv run python poc/evaluate.py --dataset erp --models gliner --adapter models/gliner-erp/best
 
 Writes the adapter to <output>/{best,final} (a few MB, not the full model).
-CPU only, matching the project's torch build. A few hundred rows train in minutes.
+Runs on the CPU with the project's own environment (its torch build is CPU only, to keep
+the demo image small). To train on an AMD GPU, use the separate ROCm environment:
+    uv venv .venv-rocm --python 3.12
+    uv pip install --python .venv-rocm/bin/python torch==2.14.0 \
+        --index-url https://download.pytorch.org/whl/rocm7.2
+    uv pip install --python .venv-rocm/bin/python "gliner2[train]>=2.1" pandas scikit-learn \
+        transformers sentencepiece protobuf peft
+    .venv-rocm/bin/python poc/train_gliner.py ...
+The trainer picks up the GPU by itself and uses FP16 mixed precision there.
 """
 
 from __future__ import annotations
@@ -41,15 +49,19 @@ from sklearn.model_selection import train_test_split
 ROOT = Path(__file__).resolve().parent.parent
 ERP_DATA = ROOT / "eval" / "erp_eval.csv"
 ERP_MULTI_DATA = ROOT / "eval" / "erp_eval_multi.csv"
-EVAL_SETS = [ERP_DATA, ERP_MULTI_DATA]
+ERP_HARMFUL_DATA = ROOT / "eval" / "erp_eval_harmful.csv"
+# Real demo prompts, hand-labelled. Kept out of git with the rest of data/.
+ERP_REAL_DATA = ROOT / "data" / "erp_eval_real.csv"
+EVAL_SETS = [ERP_DATA, ERP_MULTI_DATA, ERP_HARMFUL_DATA, ERP_REAL_DATA]
 TRAIN_DATA = ROOT / "data" / "erp_train.csv"
 OUTPUT = ROOT / "models" / "gliner-erp"
 BASE_MODEL = "fastino/GLiNER2.5-Decide"
 MULTI_BASE_MODEL = "fastino/GLiNER2.5-multi-Decide"
 
 # Label descriptions are part of the model input, so they must be identical at training
-# and inference. Wording follows the taxonomy in evaluate_llm.py. "harmful" is only used
-# for the public dataset, which has no ERP-specific categories.
+# and inference. Wording follows the taxonomy in evaluate_llm.py. "harmful" is shared with
+# the public dataset; in the ERP set it covers requests no business role justifies, such
+# as discriminatory hiring or weapons.
 CATEGORY_DESCRIPTIONS = {
     "benign": "An ordinary business request within the user's role, even if it uses words "
               "like ignore, override, admin or credentials in a business sense",
@@ -63,10 +75,11 @@ CATEGORY_DESCRIPTIONS = {
                                 "hidden rules, tool definitions or schemas",
     "data_snooping": "Asks for data outside the user's role, or bulk personal or commercially "
                      "sensitive data with no business need",
-    "harmful": "A request for harmful, illegal, hateful or dangerous content",
+    "harmful": "A request for harmful, illegal, hateful, discriminatory, sexual or dangerous "
+               "content, whatever role or framing it comes with",
 }
 ERP_CATEGORIES = ["benign", "prompt_injection", "jailbreak", "secret_seeking",
-                  "system_prompt_extraction", "data_snooping"]
+                  "system_prompt_extraction", "data_snooping", "harmful"]
 # Same enums as evaluate_llm.py.
 MODULES = ["hr", "finance", "inventory", "purchasing", "sales", "admin", "none"]
 INTENTS = ["lookup", "aggregate", "export", "mutate", "explain", "troubleshoot",
@@ -146,18 +159,28 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--train", type=Path, nargs="+", default=[TRAIN_DATA])
+    parser.add_argument("--langs", nargs="+", default=None,
+                        help="keep only rows in these languages, e.g. --langs en for the English "
+                             "model, so it never sees a language whose only rows are attacks")
     parser.add_argument("--base-model", default=BASE_MODEL,
                         help=f"e.g. {MULTI_BASE_MODEL} for the multilingual model")
     parser.add_argument("--output", type=Path, default=OUTPUT)
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--grad-accum", type=int, default=1,
+                        help="batches per optimiser step; --batch-size 4 --grad-accum 2 matches the "
+                             "default batch of 8 in half the GPU memory")
     parser.add_argument("--val-frac", type=float, default=0.15,
                         help="share of the training CSV held back to pick the best epoch")
     parser.add_argument("--lora-r", type=int, default=16)
+    parser.add_argument("--precision", default="auto", choices=["auto", "fp32", "fp16", "bf16"],
+                        help="GPU only: auto is the trainer's default (fp16)")
     args = parser.parse_args()
 
     df = pd.concat([load_training_csv(p) for p in args.train], ignore_index=True)
     df["lang"] = df["lang"].fillna("en") if "lang" in df.columns else "en"
+    if args.langs:
+        df = df[df["lang"].isin(args.langs)]
     # Contrast pairs share text but differ in role, so dedupe across files on both.
     dupes = pd.DataFrame({"t": df["text"].map(normalise), "r": df["role"]}).duplicated()
     if dupes.any():
@@ -173,6 +196,7 @@ def main() -> None:
     train, val = train_test_split(df, test_size=args.val_frac, random_state=42, stratify=stratify)
     print(f"train={len(train)} val={len(val)}\n")
 
+    import torch
     from gliner2 import AutoExtractor
     from gliner2.training.trainer import ExtractorTrainer, TrainingConfig
 
@@ -181,13 +205,17 @@ def main() -> None:
         output_dir=str(args.output),
         num_epochs=args.epochs,
         batch_size=args.batch_size,
+        gradient_accumulation_steps=args.grad_accum,
         eval_strategy="epoch",
         save_best=True,
         use_lora=True,
         lora_r=args.lora_r,
         lora_alpha=2.0 * args.lora_r,
-        # CPU torch build: no pinned memory, and worker processes add nothing at this size.
-        pin_memory=False,
+        # Pinned memory speeds up host-to-GPU copies and does nothing on the CPU; worker
+        # processes add nothing at this size.
+        pin_memory=torch.cuda.is_available(),
+        **({} if args.precision == "auto" else
+           {"fp16": args.precision == "fp16", "bf16": args.precision == "bf16"}),
         num_workers=0,
     )
     ExtractorTrainer(model, config).train(train_data=to_examples(train),
@@ -200,6 +228,7 @@ def main() -> None:
         "category_counts": df["category"].value_counts().to_dict(),
         "lang_counts": df["lang"].value_counts().to_dict(),
         "args": {k: str(v) for k, v in vars(args).items()},
+        "device": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu",
     }
     (args.output / "train_meta.json").write_text(json.dumps(meta, indent=2))
     print(f"\nadapter written to {args.output}/best and {args.output}/final")

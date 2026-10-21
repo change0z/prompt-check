@@ -12,3 +12,4 @@ models/gliner-erp/*
 !models/gliner-erp-multi
 models/gliner-erp-multi/*
 !models/gliner-erp-multi/best
+.venv-*

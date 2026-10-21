@@ -232,3 +232,6 @@ models/gliner-erp-multi/*
 
 # Demo submissions (demo/app.py)
 demo_data/
+
+# ROCm (AMD GPU) training environment, see poc/train_gliner.py
+.venv-*/

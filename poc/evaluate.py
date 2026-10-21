@@ -48,6 +48,8 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "prompts.parquet"
 ERP_DATA = ROOT / "eval" / "erp_eval.csv"
 ERP_MULTI_DATA = ROOT / "eval" / "erp_eval_multi.csv"
+ERP_HARMFUL_DATA = ROOT / "eval" / "erp_eval_harmful.csv"
+ERP_REAL_DATA = ROOT / "data" / "erp_eval_real.csv"
 RESULTS = ROOT / "results"
 CATEGORIES = ["benign", "prompt_injection", "jailbreak", "harmful"]
 
@@ -112,15 +114,19 @@ def run_gliner(test: pd.DataFrame, adapter: str | None, base_model: str):
     """One call per prompt returning category, plus module and intent when the set has
     them. The role is prepended when present, exactly as train_gliner.py trains it."""
     from gliner2 import AutoExtractor
-    from train_gliner import CATEGORY_DESCRIPTIONS, inference_schema, model_input
+    from train_gliner import CATEGORY_DESCRIPTIONS, ERP_CATEGORIES, inference_schema, model_input
 
     model = AutoExtractor.from_pretrained(base_model)
     if adapter:
         model.load_adapter(adapter)
-    # Offer only the taxonomy of the set in use, in training order: the ERP categories
-    # exist only in the ERP set, "harmful" only in the public one.
-    present = set(test["category"])
-    categories = [c for c in CATEGORY_DESCRIPTIONS if c in present]
+    # ERP sets (they carry a role) always get the full ERP taxonomy, as the demo does, so a
+    # set holding only one category still tests the model's choice among all of them. The
+    # public set offers only its own categories, in training order.
+    if "role" in test.columns:
+        categories = ERP_CATEGORIES
+    else:
+        present = set(test["category"])
+        categories = [c for c in CATEGORY_DESCRIPTIONS if c in present]
     with_usage = {"module", "intent"} <= set(test.columns)
     schema = inference_schema(categories, with_usage)
     roles = test["role"] if "role" in test.columns else [None] * len(test)
@@ -230,17 +236,22 @@ def main() -> None:
                         help="evaluate on a random sample of N test prompts")
     parser.add_argument("--base-model", default=None,
                         help="gliner only: base model (default the English GLiNER2.5-Decide)")
-    parser.add_argument("--dataset", default="public", choices=["public", "erp", "erp-multi"],
+    parser.add_argument("--dataset", default="public",
+                        choices=["public", "erp", "erp-multi", "erp-harmful", "erp-real"],
                         help="public = held-out split of the HF datasets; "
                              "erp = the hand-reviewed synthetic ERP set; "
-                             "erp-multi = the Sage X3 style set in en, fr, es, de and pt")
+                             "erp-multi = the same set plus fr, es, de and pt; "
+                             "erp-harmful = public harmful requests in five languages; "
+                             "erp-real = hand-labelled prompts from the live demo (local only)")
     args = parser.parse_args()
 
     # tfidf always trains on the public train split; only the test set changes.
     df = pd.read_parquet(DATA)
     train = df[df["split"] == "train"]
     test = {"public": lambda: df[df["split"] == "test"], "erp": lambda: pd.read_csv(ERP_DATA),
-            "erp-multi": lambda: pd.read_csv(ERP_MULTI_DATA)}[args.dataset]()
+            "erp-multi": lambda: pd.read_csv(ERP_MULTI_DATA),
+            "erp-harmful": lambda: pd.read_csv(ERP_HARMFUL_DATA),
+            "erp-real": lambda: pd.read_csv(ERP_REAL_DATA)}[args.dataset]()
     if args.limit:
         test = test.sample(n=min(args.limit, len(test)), random_state=42)
     texts = test["text"].tolist()

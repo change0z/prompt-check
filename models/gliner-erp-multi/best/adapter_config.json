@@ -35,11 +35,11 @@
   "rank_pattern": {},
   "revision": null,
   "target_modules": [
-    "classifier.3",
-    "query_proj",
-    "key_proj",
-    "value_proj",
     "dense",
+    "key_proj",
+    "query_proj",
+    "classifier.3",
+    "value_proj",
     "classifier.0"
   ],
   "target_parameters": null,

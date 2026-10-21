@@ -12,6 +12,7 @@ Licences verified 2026-09-20 from Hugging Face card metadata
 | jackhhao/jailbreak-classification | jailbreak + benign | Apache-2.0 | Yes | Mostly DAN-style prompts |
 | nvidia/Aegis-AI-Content-Safety-Dataset-2.0 | harmful + benign, with harm subcategories | CC-BY-4.0 | Yes, with attribution | Human-labelled. Prompts derived from Anthropic HH-RLHF. NVIDIA states PII was removed but some may remain. "REDACTED" rows (Suicide Detection samples) excluded by our loader. |
 | dmilush/shieldlm-prompt-injection | multilingual prompt_injection (fr, es, de, pt) for the multilingual adapter, train split for training and test split for eval | MIT | Yes | Only the non-English direct injections are used; they originate in yanismiraoui/prompt_injections (Apache-2.0). Generic attacks, so labelled module none, intent off_topic, random role. Built by poc/build_multilingual.py |
+| usezn/zn-prompt-injection-bench | multilingual harmful requests (fr, es, de, pt) for the harmful category, train split for training and test split for eval | CC-BY-4.0 (dataset); rows filtered to MIT and CC-BY-4.0 | Yes, with attribution | Only translated harmful requests (sources aegis_2.0, hh_rlhf, advbench, jbb_behaviors). Built by poc/build_harmful.py |
 
 ## Datasets rejected
 
@@ -22,6 +23,20 @@ Licences verified 2026-09-20 from Hugging Face card metadata
 | TrustAIRLab/in-the-wild-jailbreak-prompts | Scraped from real users' posts; avoid personal data |
 | xTRam1/safe-guard-prompt-injection | No licence declared |
 | allenai/wildjailbreak | Gated access |
+
+## Harmful category
+
+poc/build_harmful.py samples Aegis 2.0 harmful prompts (from data/prompts.parquet) and the
+zn-prompt-injection-bench translations above into data/erp_train_harmful.csv and
+eval/erp_eval_harmful.csv, train and test splits kept apart. PII/Privacy prompts are left
+out because they overlap with data_snooping and secret_seeking.
+
+## Live demo prompts
+
+data/erp_eval_real.csv holds prompts submitted to the public demo, hand-labelled, with
+real-looking names replaced. It is a held-out test set only, never trained on, and stays
+out of git with the rest of data/. Visitors were told prompts are stored (see the demo's
+"what we collect" panel).
 
 ## Machine translation
 

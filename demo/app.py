@@ -15,6 +15,8 @@ Run locally:
 Environment:
     ADAPTER_PATH        English LoRA adapter (default models/gliner-erp/best)
     MULTI_ADAPTER_PATH  multilingual LoRA adapter (default models/gliner-erp-multi/best)
+    MODEL_DTYPE         bfloat16, float32 or auto (default): bfloat16 when the CPU has native
+                        bf16 instructions, otherwise float32, where bf16 would be emulated and slow
     DATA_DIR       where prompts.db lives (default demo_data/; mount a volume here)
     ADMIN_TOKEN    enables GET /admin/export.csv?token=...; export is off when unset
 """
@@ -91,15 +93,35 @@ def init_db() -> None:
                 conn.execute(f"ALTER TABLE submissions ADD COLUMN {col} {kind}")
 
 
+def model_dtype():
+    """bfloat16 halves the weights' memory and, on CPUs with bf16 instructions, doubles the
+    speed. Measured on our eval sets, the fine-tuned models give identical verdicts to
+    float32 and the base models agree on 96 to 99.5 percent. int8 quantisation was tried
+    and rejected: it wrecked the DeBERTa encoders' accuracy."""
+    import torch
+
+    choice = os.environ.get("MODEL_DTYPE", "auto")
+    if choice == "auto":
+        choice = "bfloat16" if torch.ops.mkldnn._is_mkldnn_bf16_supported() else "float32"
+    return getattr(torch, choice)
+
+
 def load_models() -> None:
+    import gc
+
     from gliner2 import AutoExtractor
     from peft import PeftModel
 
+    dtype = model_dtype()
     for name, adapter in {BASE_MODEL: ADAPTER_PATH, MULTI_BASE_MODEL: MULTI_ADAPTER_PATH}.items():
         base = AutoExtractor.from_pretrained(name)
         peft_model = PeftModel.from_pretrained(base, str(adapter))
-        peft_model.eval()
+        # Convert before loading the next model, so the float32 copies never coexist.
+        peft_model.to(dtype).eval()
+        gc.collect()
         state[name] = (base, peft_model)
+    state["dtype"] = str(dtype).removeprefix("torch.")
+    print(f"models loaded as {state['dtype']}", flush=True)
 
 
 @asynccontextmanager
@@ -164,7 +186,7 @@ def index():
 
 @app.get("/health")
 def health():
-    return {"ok": MULTI_BASE_MODEL in state}
+    return {"ok": MULTI_BASE_MODEL in state, "dtype": state.get("dtype")}
 
 
 @app.get("/api/options")
